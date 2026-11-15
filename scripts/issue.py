@@ -33,6 +33,7 @@ def issue_point(model, ckpt: dict, lid: str, today: date) -> pd.DataFrame:
     fc = forcing.fetch_forecast(lid)
     end = pd.Timestamp(today) + pd.Timedelta(days=LEADS)
     combined = pd.concat([hist, fc[fc.index > hist.index[-1]]]).loc[:end]
+    combined.loc[combined.index[-1] + pd.Timedelta(days=1)] = combined.iloc[-1]  # build_frame's shift drops the last row; this copy is never read
     frame = F.build_frame(lid, ckpt["fit_end"], f=combined)
     z = F.prep(frame, np.array(ckpt["f_mean"]), np.array(ckpt["f_std"]), ckpt["s_target"][lid])
     z[F.TARGET] = z[F.TARGET].fillna(0.0)  # windows are built only on days with a target; the value is unused here
