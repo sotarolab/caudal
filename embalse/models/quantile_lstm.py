@@ -119,15 +119,6 @@ def pinball_loss(
     return torch.maximum(quantiles * err, (quantiles - 1.0) * err).mean()
 
 
-def dispatch(callbacks, hook: str, info: dict) -> bool:
-    """Call `hook` on every callback; return True if any asked to stop (from caudal.training.callbacks)."""
-    stop = False
-    for cb in callbacks or ():
-        fn = getattr(cb, hook, None)
-        stop = (bool(fn(info)) if fn else False) or stop
-    return stop
-
-
 def train_quantile_epochs(
     model: QuantileLSTM,
     loader,
@@ -147,6 +138,8 @@ def train_quantile_epochs(
     path that produced the frozen v4us record, and adding a loss switch to it would put the
     frozen arm one bad default away from silently changing.
     """
+    from embalse.training.callbacks import dispatch
+
     model.to(device)
     q = model._q.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
