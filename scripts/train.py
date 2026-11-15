@@ -2,7 +2,7 @@
 
 Protocol (caudal's regional arm, applied to inflow): fit through FIT_END with nothing held out, evaluate
 EVAL_START..EVAL_END, pinball loss over DEFAULT_QUANTILES, lr 1e-3, 30 epochs, lookback 365, hidden 128.
-References on the same days: persistence (yesterday's inflow) and per-day-of-year climatology from the fit window.
+Scoring (all days and AR days, persistence and climatology references) is `embalse.evaluate`.
 
 Usage
 -----
@@ -18,56 +18,19 @@ import argparse
 import sys
 import time
 
-import numpy as np
-import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
 from embalse import frames as F
 from embalse.config import MODELS_DIR, RESULTS_DIR
-from embalse.models.quantile_lstm import DEFAULT_QUANTILES, QuantileLSTM, predict_quantiles, train_quantile_epochs
+from embalse.models.quantile_lstm import DEFAULT_QUANTILES, QuantileLSTM, train_quantile_epochs
 from embalse.models.sequence import SequenceDataset, get_device
 from embalse.points import TRAINED
-from embalse.scores import crps_ensemble
+from embalse.evaluate import evaluate_all, show
 from embalse.training import MetricsLogger, ProgressLogger, RunArtifacts
 
 VERSION = "v1"
 LR = 1e-3
-Q = {q: i for i, q in enumerate(DEFAULT_QUANTILES)}
-
-
-def crps_climatology(obs: pd.Series, fit: pd.Series) -> float:
-    """Mean CRPS of the per-day-of-year fit-window ensemble over the observed days."""
-    by_doy = fit.dropna().groupby(fit.dropna().index.day_of_year)
-    return float(np.mean([crps_ensemble(by_doy.get_group(d.day_of_year).to_numpy()[None, :], np.array([y]))[0]
-                          for d, y in obs.items()]))
-
-
-def nse(sim: np.ndarray, obs: np.ndarray) -> float:
-    return float(1 - np.sum((obs - sim) ** 2) / np.sum((obs - obs.mean()) ** 2))
-
-
-def evaluate(model, frames: dict, lid: str) -> dict | None:
-    raw, s = frames["raw"][lid], frames["s_target"][lid]
-    hist = raw.loc[: F.EVAL_START].iloc[-(F.LOOKBACK + 1) : -1]
-    ev = F.prep(pd.concat([hist, raw.loc[F.EVAL_START : F.EVAL_END]]), frames["f_mean"], frames["f_std"], s)
-    preds, obs_s, idx = predict_quantiles(model, ev, F.FEATURES, F.TARGET, F.LOOKBACK)
-    if len(idx) == 0:
-        return None
-    preds, obs = np.clip(preds * s, 0, None), obs_s * s
-    yesterday = raw[F.TARGET].reindex(idx - pd.Timedelta(days=1)).to_numpy()
-    ok = np.isfinite(yesterday)
-    return {
-        "lid": lid, "n_days": len(idx),
-        "crps_model": float(crps_ensemble(preds, obs).mean()),
-        "crps_persistence": float(np.abs(yesterday[ok] - obs[ok]).mean()),
-        "crps_climatology": crps_climatology(pd.Series(obs, index=idx), raw.loc[: F.FIT_END, F.TARGET]),
-        "cov90": float(np.mean((preds[:, Q[0.05]] <= obs) & (obs <= preds[:, Q[0.95]]))),
-        "nse_median": nse(preds[:, Q[0.50]], obs),
-        "rel_spread": float((preds[:, -1] - preds[:, 0]).mean() / max(preds[:, Q[0.50]].mean(), 1e-6)),
-    }
-
-
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--seed", type=int, default=0)
@@ -96,11 +59,8 @@ def main(argv=None) -> int:
                                    callbacks=[MetricsLogger(art), ProgressLogger(frequency=5, prefix=f"{run} ")])
     print(f"[{time.strftime('%H:%M:%S')}] pinball {losses[0]:.4f} -> {losses[-1]:.4f} ({time.time() - t0:.0f}s)", flush=True)
 
-    rows = [r for lid in frames["train"] if (r := evaluate(model, frames, lid))]
-    table = pd.DataFrame(rows).set_index("lid")
-    pooled = table.drop(columns="n_days").mean().rename("pooled")
-    pd.set_option("display.width", 160)
-    print(pd.concat([table, pooled.to_frame().T]).round(3).to_string(), flush=True)
+    table = evaluate_all(model, frames, DEFAULT_QUANTILES)
+    pooled = show(table)
     if not pooled.rel_spread >= 0.05 and not a.smoke:  # also catches NaN
         art.update_manifest(status="collapsed", **pooled.to_dict())
         print("quantile heads COLLAPSED (see quantile_lstm docstring on lr); refusing to save the model", file=sys.stderr)
