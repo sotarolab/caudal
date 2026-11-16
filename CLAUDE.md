@@ -41,13 +41,23 @@ Data lives under `data/` at the repository root (or `CAUDAL_DATA`) and is not in
 The owner owns the process.
 
 - **Plan first.** Anything beyond a one-file fix starts as a plan the owner approves.
-- **Small pull requests, one layer each**, opened as an issue plus a linked pull request. The
-  owner merges.
-- **Pushing.** Commit to a branch and stop. The owner pushes and opens the pull request, unless
-  they have said in the session that Claude may.
-- **Review before the owner reads.** Run `ponytail-review` on the branch and put its findings in
-  the pull request description. Run `ponytail-audit` before a release.
+- **One issue, one branch, one pull request.** `/issue` opens the issue, with the tests to
+  write listed in it; the owner approves them by leaving them there. Work happens on a branch
+  named `<issue number>-<slug>`, in this checkout, never in a hidden worktree. Before editing a
+  file, name it with a link so the owner can follow along. One stage at a time, each ending
+  with the diff in view.
+- **Tests mirror the layers.** A test for `caudal/<layer>/<module>.py` is
+  `tests/<layer>/test_<module>.py`. Small real data slices live in `tests/fixtures/`.
+- **`/pr` finishes the work.** `make qc`, the `ponytail-review` skill, the pull request from
+  the template (with its Not checked section filled), push the branch, open the pull request
+  on its milestone, then the built-in code review with inline comments. Claude may push
+  feature branches and open issues and pull requests in this repository. Claude never pushes
+  to the default branch, never force pushes and never merges; the settings deny the last two.
+  The owner reviews and merges.
+- **`/milestone` closes a milestone**: `ponytail-audit`, `ponytail-debt`, findings filed as
+  issues in the next milestone, release notes, a tag the owner pushes.
 - **Decisions are recorded the day they are made**, one page, with `/adr`.
 - **Attribution.** A commit Claude wrote ends with the Claude co-author line. A commit that
-  touches only `caudal/science/` or `tests/science/` is the owner's and carries none.
+  touches `caudal/science/` or `tests/science/` is the owner's and carries none; CI fails a
+  pull request where one does.
 - **Say what was not checked.** End a piece of work with what was skipped and what is uncertain.

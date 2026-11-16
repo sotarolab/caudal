@@ -23,7 +23,8 @@ body.
 ## The docstring
 
 - One sentence saying what the function computes and when it is used.
-- The equation, in LaTeX inside a `.. math::` block, with every symbol defined.
+- The equation, in LaTeX between two lines of `$$`, with every symbol defined. The
+  documentation site renders `$$` in docstrings; it does not render `.. math::` blocks.
 - Parameters and returns with shapes and units.
 - `References`: the paper the equation comes from, with year and equation number. If the
   reference is from memory and not checked, say so in a `TODO(owner): confirm reference` line.

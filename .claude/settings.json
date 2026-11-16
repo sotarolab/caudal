@@ -2,7 +2,12 @@
   "permissions": {
     "deny": [
       "Edit(/caudal/science/**)",
-      "Edit(/tests/science/**)"
+      "Edit(/tests/science/**)",
+      "Bash(gh pr merge *)",
+      "Bash(git push --force*)",
+      "Bash(git push * --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * -f*)"
     ]
   },
   "hooks": {
