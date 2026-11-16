@@ -1,0 +1,47 @@
+name: Issue the daily forecasts
+
+# quantile_inflow_v1_s0 for its 11 points, every day at 14:20 UTC: the 06z forecast cycle has reached
+# Open-Meteo by then, and hapi's own archive run (every 6 hours at :37) comes after. The checkpoint,
+# the ERA5 forcing archive and the observed inflow all live on hapi's data branch; the forecasts and
+# the extended forcing are committed back to it, so the inputs of every issued forecast are on record.
+on:
+  schedule:
+    - cron: '20 14 * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: issue
+  cancel-in-progress: false
+
+jobs:
+  issue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CAUDAL_DATA: ${{ github.workspace }}/hapi-data/data
+      HAPI_DATA: ${{ github.workspace }}/hapi-data/data
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: sotarolab/hapi
+          ref: data
+          path: hapi-data
+          token: ${{ secrets.HAPI_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -e . --extra-index-url https://download.pytorch.org/whl/cpu
+      - run: python scripts/issue.py --out "$HAPI_DATA"
+      # A point that failed leaves the job red; the points that issued are still committed.
+      - name: Commit the forecasts and the forcing
+        if: ${{ !cancelled() }}
+        working-directory: hapi-data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/forecasts data/forcing
+          git diff --cached --quiet && exit 0
+          git commit -q -m "issue quantile_inflow_v1_s0 $(date -u +%Y-%m-%d)"
+          git pull -q --rebase origin data   # hapi's archive job may have pushed meanwhile
+          git push -q origin HEAD:data
