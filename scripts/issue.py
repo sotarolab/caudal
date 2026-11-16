@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import numpy as np
 import pandas as pd
@@ -55,7 +55,7 @@ def main(argv=None) -> int:
     p.add_argument("--out", default=str(LEDGER_DATA), help="hapi data directory")
     p.add_argument("--date", default=None, help="issue date, default today UTC")
     a = p.parse_args(argv)
-    today = date.fromisoformat(a.date) if a.date else datetime.now(timezone.utc).date()
+    today = date.fromisoformat(a.date) if a.date else datetime.now(UTC).date()
     ckpt = torch.load(MODELS_DIR / f"{a.model}.pt", map_location="cpu", weights_only=False)
     model = QuantileLSTM(n_features=len(ckpt["features"]), hidden_size=ckpt["hidden"], quantiles=ckpt["quantiles"])
     model.load_state_dict(ckpt["state_dict"])

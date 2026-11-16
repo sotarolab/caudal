@@ -34,7 +34,7 @@ def _daily(url: str) -> pd.DataFrame:
             with urllib.request.urlopen(url, timeout=120) as r:
                 d = json.load(r)["daily"]
             break
-        except Exception as e:  # Open-Meteo rate-limits bursts; back off and retry
+        except Exception:  # Open-Meteo rate-limits bursts; back off and retry
             if attempt == 2:
                 raise
             time.sleep(10 * (attempt + 1))

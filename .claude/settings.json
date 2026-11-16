@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(/caudal/science/**)",
+      "Edit(/tests/science/**)",
+      "Bash(gh pr merge *)",
+      "Bash(git push --force*)",
+      "Bash(git push * --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * -f*)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/qc-on-stop.sh",
+            "timeout": 180,
+            "statusMessage": "Running make qc"
+          }
+        ]
+      }
+    ]
+  }
+}

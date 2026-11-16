@@ -2,7 +2,12 @@
 
 from caudal.training.artifacts import RUNS_DIR, RunArtifacts, environment_fingerprint, list_runs
 from caudal.training.callbacks import (
-    BaseCallback, CheckpointSaver, EarlyStopping, MetricsLogger, ProgressLogger, dispatch,
+    BaseCallback,
+    CheckpointSaver,
+    EarlyStopping,
+    MetricsLogger,
+    ProgressLogger,
+    dispatch,
 )
 
 __all__ = ["RUNS_DIR", "RunArtifacts", "environment_fingerprint", "list_runs", "BaseCallback", "CheckpointSaver",

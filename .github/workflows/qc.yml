@@ -1,0 +1,39 @@
+name: qc
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+
+# A new push to a pull request cancels the run it supersedes. A run on the default branch is
+# never cancelled: every merge is tested on its own.
+concurrency:
+  group: qc-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  qc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the authorship check reads the commits of the pull request
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # torch's CPU build: the tests train a few steps on synthetic data and need no GPU.
+      - run: pip install -e ".[dev]" --extra-index-url https://download.pytorch.org/whl/cpu
+      - run: make qc
+      # "The science is written by a person" (docs/ARCHITECTURE.md) as a check, not a promise:
+      # no commit that touches the core may carry the Claude co-author line.
+      - name: The core is written by a person
+        env:
+          RANGE: ${{ github.event_name == 'pull_request' && format('origin/{0}..HEAD', github.base_ref) || format('{0}..HEAD', github.event.before) }}
+        run: |
+          case "$RANGE" in 0000000*) exit 0;; esac   # first push of a branch: no range to check
+          fail=0
+          for c in $(git log --format=%H "$RANGE" -- caudal/science tests/science); do
+            if git show -s --format=%B "$c" | grep -qi '^Co-Authored-By: Claude'; then
+              echo "::error::commit $c touches the core and carries the Claude co-author line"; fail=1
+            fi
+          done
+          exit $fail
