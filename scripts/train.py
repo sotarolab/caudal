@@ -23,10 +23,10 @@ from torch.utils.data import DataLoader
 
 from caudal import frames as F
 from caudal.config import MODELS_DIR, RESULTS_DIR
+from caudal.evaluate import evaluate_all, show
 from caudal.models.quantile_lstm import DEFAULT_QUANTILES, QuantileLSTM, train_quantile_epochs
 from caudal.models.sequence import SequenceDataset, get_device
 from caudal.points import TRAINED
-from caudal.evaluate import evaluate_all, show
 from caudal.training import MetricsLogger, ProgressLogger, RunArtifacts
 
 VERSION = "v1"
