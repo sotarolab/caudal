@@ -21,6 +21,7 @@ Environment: conda env `embalse` (`conda create -n embalse python=3.11`, then `p
     python scripts/train.py --smoke      # 2 points, 1 epoch
     python scripts/train.py              # seed 0, 30 epochs; writes data/models/ and data/results/
     python -m pytest tests
+    jupyter lab notebooks/walkthrough.ipynb   # the whole thing, end to end: data, frames, model, skill, calibration, the ledger, the paper
 
 Not yet here: the daily issue script that writes quantile forecasts into inflow-ledger, conformal calibration,
 AR-day scoring, basin-mean forcing.
