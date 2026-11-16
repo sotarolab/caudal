@@ -1,8 +1,8 @@
 """Train one regional quantile LSTM on the reservoir inflow points and score it on the held-out water years.
 
-Protocol (caudal's regional arm, applied to inflow): fit through FIT_END with nothing held out, evaluate
+Protocol (caudal-fleet's regional arm, applied to inflow): fit through FIT_END with nothing held out, evaluate
 EVAL_START..EVAL_END, pinball loss over DEFAULT_QUANTILES, lr 1e-3, 30 epochs, lookback 365, hidden 128.
-Scoring (all days and AR days, persistence and climatology references) is `embalse.evaluate`.
+Scoring (all days and AR days, persistence and climatology references) is `caudal.evaluate`.
 
 Usage
 -----
@@ -21,13 +21,13 @@ import time
 import torch
 from torch.utils.data import DataLoader
 
-from embalse import frames as F
-from embalse.config import MODELS_DIR, RESULTS_DIR
-from embalse.models.quantile_lstm import DEFAULT_QUANTILES, QuantileLSTM, train_quantile_epochs
-from embalse.models.sequence import SequenceDataset, get_device
-from embalse.points import TRAINED
-from embalse.evaluate import evaluate_all, show
-from embalse.training import MetricsLogger, ProgressLogger, RunArtifacts
+from caudal import frames as F
+from caudal.config import MODELS_DIR, RESULTS_DIR
+from caudal.models.quantile_lstm import DEFAULT_QUANTILES, QuantileLSTM, train_quantile_epochs
+from caudal.models.sequence import SequenceDataset, get_device
+from caudal.points import TRAINED
+from caudal.evaluate import evaluate_all, show
+from caudal.training import MetricsLogger, ProgressLogger, RunArtifacts
 
 VERSION = "v1"
 LR = 1e-3

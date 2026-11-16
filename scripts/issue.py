@@ -1,4 +1,4 @@
-"""Issue today's quantile inflow forecasts, leads 1-14 days, into the inflow-ledger data directory.
+"""Issue today's quantile inflow forecasts, leads 1-14 days, into the hapi data directory.
 
 For each point: extend the ERA5 archive, bridge from its last day to today with the forecast model's analysis
 days, append the 16-day forecast, run the regional quantile LSTM, and write
@@ -20,10 +20,10 @@ import numpy as np
 import pandas as pd
 import torch
 
-from embalse import forcing
-from embalse import frames as F
-from embalse.config import LEDGER_DATA, MODELS_DIR
-from embalse.models.quantile_lstm import QuantileLSTM, predict_quantiles
+from caudal import forcing
+from caudal import frames as F
+from caudal.config import LEDGER_DATA, MODELS_DIR
+from caudal.models.quantile_lstm import QuantileLSTM, predict_quantiles
 
 LEADS = 14
 
@@ -52,7 +52,7 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--model", default="quantile_inflow_v1_s0")
     p.add_argument("--points", default="", help="comma list; default: the model's points")
-    p.add_argument("--out", default=str(LEDGER_DATA), help="inflow-ledger data directory")
+    p.add_argument("--out", default=str(LEDGER_DATA), help="hapi data directory")
     p.add_argument("--date", default=None, help="issue date, default today UTC")
     a = p.parse_args(argv)
     today = date.fromisoformat(a.date) if a.date else datetime.now(timezone.utc).date()

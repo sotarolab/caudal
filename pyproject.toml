@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "embalse"
+name = "caudal"
 version = "0.1.0"
-description = "Private ML models for river-flow and reservoir-inflow forecasting, scored publicly in inflow-ledger"
+description = "ML models for river-flow and reservoir-inflow forecasting, scored publicly in hapi"
 requires-python = ">=3.11"
 dependencies = ["numpy>=2", "pandas>=2.2", "torch>=2.9"]
 
@@ -13,4 +13,4 @@ dependencies = ["numpy>=2", "pandas>=2.2", "torch>=2.9"]
 dev = ["pytest>=9"]
 
 [tool.setuptools.packages.find]
-include = ["embalse*"]
+include = ["caudal*"]

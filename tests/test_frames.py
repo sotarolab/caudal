@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from embalse import config, frames
+from caudal import config, frames
 
 
 def test_build_frame_shifts_forcing_and_keeps_target_gaps(tmp_path, monkeypatch):

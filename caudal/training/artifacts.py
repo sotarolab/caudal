@@ -4,8 +4,8 @@ Exists so a training run can be QC'd after the fact and resumed after a crash. W
 run's only record is its final loss value, and an interrupted multi-hour fleet loses every
 model trained so far.
 
-This is the framework-neutral core: the hand-rolled loops in `embalse.models` and the Lightning
-wrappers in `embalse.training.lightning` both write the identical layout below. The callback
+This is the framework-neutral core: the hand-rolled loops in `caudal.models` and the Lightning
+wrappers in `caudal.training.lightning` both write the identical layout below. The callback
 protocol matches Lightning's hook names (`on_epoch_end`, `on_train_end`) and also accepts the
 plain `__call__(info: dict)` shape calibration loops use, so the conceptual and neural sides
 share one idea of what a callback is.
@@ -37,7 +37,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from embalse.config import RESULTS_DIR
+from caudal.config import RESULTS_DIR
 
 RUNS_DIR = RESULTS_DIR / "runs"
 

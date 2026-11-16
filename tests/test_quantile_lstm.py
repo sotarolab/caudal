@@ -1,4 +1,4 @@
-"""Invariant tests for `embalse.models.quantile_lstm` (H3).
+"""Invariant tests for `caudal.models.quantile_lstm` (H3).
 
 Two properties carry the experiment and would corrupt it silently if broken: the pinball loss
 must actually be the pinball loss (an asymmetry error would train the wrong target), and
@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 import torch
 
-from embalse.models.quantile_lstm import (
+from caudal.models.quantile_lstm import (
     DEFAULT_QUANTILES,
     QuantileLSTM,
     pinball_loss,

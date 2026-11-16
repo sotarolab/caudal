@@ -14,8 +14,8 @@ from datetime import date, timedelta
 
 import pandas as pd
 
-from embalse.config import FORCING_DIR
-from embalse.points import POINTS
+from caudal.config import FORCING_DIR
+from caudal.points import POINTS
 
 VARS = {"precipitation_sum": "precip", "temperature_2m_max": "tmax", "temperature_2m_min": "tmin",
         "temperature_2m_mean": "tmean", "et0_fao_evapotranspiration": "pet"}

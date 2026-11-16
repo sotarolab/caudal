@@ -1,6 +1,6 @@
 import numpy as np
 
-from embalse.scores import crps_ensemble
+from caudal.scores import crps_ensemble
 
 
 def test_one_member_is_absolute_error_and_spread_lowers_crps():

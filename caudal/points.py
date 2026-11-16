@@ -6,7 +6,7 @@ Regulation decides what the model is asked to predict:
 - "handoff": a gauge below a dam; recent observed flow is fed to the model so it learns the release level (v2).
 
 Coordinates and elevation (ft) are the CDEC station's, i.e. the dam. WRS, DNP, CLE, INV have negative computed
-inflows at low flow and are archived in inflow-ledger but not scored or trained on. HETC1 and CMPC1 have no CDEC inflow.
+inflows at low flow and are archived in hapi but not scored or trained on. HETC1 and CMPC1 have no CDEC inflow.
 """
 
 # CNRFC id: (CDEC station, name, latitude, longitude, dam elevation ft)

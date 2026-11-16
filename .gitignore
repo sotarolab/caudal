@@ -1,6 +1,7 @@
-data/
-runs/
+/data/
+/runs/
 __pycache__/
 .pytest_cache/
 *.egg-info/
 *.pt
+.DS_Store

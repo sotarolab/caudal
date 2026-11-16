@@ -1,4 +1,4 @@
-"""Gap-aware sliding windows over daily frames and device selection (from caudal.models.lstm)."""
+"""Gap-aware sliding windows over daily frames and device selection (from caudal-fleet.models.lstm)."""
 
 from __future__ import annotations
 

@@ -21,7 +21,7 @@ import time
 from collections.abc import Callable, Sequence
 from typing import Any, Protocol, runtime_checkable
 
-from embalse.training.artifacts import RunArtifacts
+from caudal.training.artifacts import RunArtifacts
 
 
 @runtime_checkable

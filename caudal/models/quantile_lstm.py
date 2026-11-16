@@ -1,7 +1,7 @@
 """Quantile-regression LSTM: predict the tail directly instead of the conditional mean.
 
 Tests whether a model *trained* for the tail beats reading a Gaussian model's ensemble at
-a selected quantile. caudal's `GaussianLSTM` optimises E[Q | forcing]; on
+a selected quantile. caudal-fleet's `GaussianLSTM` optimises E[Q | forcing]; on
 AR-driven flood peaks its mean under-predicts 98% of events (median |relative peak error|
 0.420), while the same ensemble read at a train-selected quantile recovers 0.224 - the
 skill is present and the summary discards it. A loss that targets the relevant quantiles
@@ -138,7 +138,7 @@ def train_quantile_epochs(
     path that produced the frozen v4us record, and adding a loss switch to it would put the
     frozen arm one bad default away from silently changing.
     """
-    from embalse.training.callbacks import dispatch
+    from caudal.training.callbacks import dispatch
 
     model.to(device)
     q = model._q.to(device)
@@ -210,7 +210,7 @@ def predict_quantiles(
     import pandas as pd
     from torch.utils.data import DataLoader
 
-    from embalse.models.sequence import SequenceDataset, get_device
+    from caudal.models.sequence import SequenceDataset, get_device
 
     device = get_device()
     model.to(device)

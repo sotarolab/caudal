@@ -1,6 +1,6 @@
 """Training frames: forcing + observed inflow per point, and the pooled normalization for one regional model.
 
-Follows caudal's regional arm: features standardized with statistics pooled over every point's fit window;
+Follows caudal-fleet's regional arm: features standardized with statistics pooled over every point's fit window;
 the target scaled per point by its own fit-window standard deviation so large reservoirs do not dominate the
 loss; dynamic features shifted one day so the window for day d ends with day d's forcing (what a forecast run
 has in hand).
@@ -11,9 +11,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from embalse import forcing
-from embalse.config import LEDGER_DATA
-from embalse.points import POINTS
+from caudal import forcing
+from caudal.config import LEDGER_DATA
+from caudal.points import POINTS
 
 DYNAMIC = [*forcing.COLS, "doy_sin", "doy_cos"]
 STATIC = ["static_lat", "static_elev", "static_log_qmean"]
@@ -27,7 +27,7 @@ EVAL_START, EVAL_END = "2015-10-01", "2025-09-30"  # water years 2016-2025
 
 
 def load_obs(lid: str) -> pd.Series:
-    """Observed daily inflow in cfs from the inflow-ledger CDEC files; negative computed inflows become NaN."""
+    """Observed daily inflow in cfs from the hapi CDEC files; negative computed inflows become NaN."""
     sta = POINTS[lid][0]
     s = pd.read_csv(LEDGER_DATA / "cdec_inflow" / f"{sta}.csv", index_col="date", parse_dates=True)["cfs"]
     return s.where(s >= 0).rename(TARGET)

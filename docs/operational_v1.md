@@ -1,6 +1,6 @@
 # Operational quantile LSTM, v1 (seed 0)
 
-Retrospective skill of the model that issues the daily forecasts committed to inflow-ledger. One regional
+Retrospective skill of the model that issues the daily forecasts committed to hapi. One regional
 pinball-loss LSTM over 11 reservoir inflow points, trained on water years 1990-2015 (fit through
 2015-09-30), scored on water years 2016-2025 (2015-10-01 to 2025-09-30). Lookback 365 days,
 hidden 128, 30 epochs, lr 0.001, 74,400 training windows, ['precip', 'tmax', 'tmin', 'tmean', 'pet', 'doy_sin', 'doy_cos', 'static_lat', 'static_elev', 'static_log_qmean'].
@@ -8,7 +8,7 @@ Forcing is Open-Meteo ERA5 sampled at the dam. Target is CDEC observed daily inf
 
 CRPS in cfs over the 7 predicted quantiles treated as an ensemble; persistence is yesterday's inflow; climatology
 is the fit-window ensemble for that day of year. AR days: a CW3E catalog AR of scale 3 or more touched the coast
-within 1.5 degrees of the dam's latitude (caudal's definition).
+within 1.5 degrees of the dam's latitude (caudal-fleet's definition).
 
 | point | days | AR days | CRPS model | CRPS persist. | CRPS clim. | CRPS model AR | CRPS persist. AR | CRPS clim. AR | cov90 | NSE q50 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -30,7 +30,7 @@ within 1.5 degrees of the dam's latitude (caudal's definition).
 - On all days the model roughly ties persistence, a hard lead-1 baseline, and halves climatology's error.
 - On AR days it beats persistence by about 38% and climatology by
   63%: the skill is concentrated where the ledger matters.
-- The 90% interval covers 60% of days: under-dispersed, as caudal found for the same head. Conformal
+- The 90% interval covers 60% of days: under-dispersed, as caudal-fleet found for the same head. Conformal
   calibration is the next layer; until then quote the intervals as nominal.
 - Weakest points: Isabella and Success (small, snow- and foothill-driven, dam-point forcing least representative).
 

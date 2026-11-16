@@ -1,9 +1,9 @@
 """Score a quantile model on the held-out water years, all days and AR days, against persistence and climatology.
 
 AR days: a qualifying landfalling AR (CW3E catalog, AR scale >= 3) touched the coast within 1.5 degrees of the
-dam's latitude (caudal's definition, `embalse.data.cw3e`). Those are the days the ledger exists for.
+dam's latitude (caudal-fleet's definition, `caudal.data.cw3e`). Those are the days the ledger exists for.
 
-    python -m embalse.evaluate quantile_inflow_v1_s0      # re-score a saved checkpoint, writes data/results/eval_<run>.csv
+    python -m caudal.evaluate quantile_inflow_v1_s0      # re-score a saved checkpoint, writes data/results/eval_<run>.csv
 """
 
 from __future__ import annotations
@@ -14,12 +14,12 @@ import numpy as np
 import pandas as pd
 import torch
 
-from embalse import frames as F
-from embalse.config import MODELS_DIR, RESULTS_DIR
-from embalse.data.cw3e import basin_ar_frame
-from embalse.models.quantile_lstm import QuantileLSTM, predict_quantiles
-from embalse.points import POINTS
-from embalse.scores import crps_ensemble
+from caudal import frames as F
+from caudal.config import MODELS_DIR, RESULTS_DIR
+from caudal.data.cw3e import basin_ar_frame
+from caudal.models.quantile_lstm import QuantileLSTM, predict_quantiles
+from caudal.points import POINTS
+from caudal.scores import crps_ensemble
 
 
 def crps_climatology(obs: pd.Series, fit: pd.Series) -> np.ndarray:
