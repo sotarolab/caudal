@@ -1,0 +1,23 @@
+name: qc
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+
+# A new push to a pull request cancels the run it supersedes. A run on the default branch is
+# never cancelled: every merge is tested on its own.
+concurrency:
+  group: qc-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  qc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # torch's CPU build: the tests train a few steps on synthetic data and need no GPU.
+      - run: pip install -e ".[dev]" --extra-index-url https://download.pytorch.org/whl/cpu
+      - run: make qc
