@@ -4,6 +4,11 @@ Follows caudal-fleet's regional arm: features standardized with statistics poole
 the target scaled per point by its own fit-window standard deviation so large reservoirs do not dominate the
 loss; dynamic features shifted one day so the window for day d ends with day d's forcing (what a forecast run
 has in hand).
+
+v2 adds the observed inflow as an input (OBS): each window day carries that day's inflow in the target's scale
+and a flag where it is missing, so a forecast starts from the river's current state. Observed flow as a model
+input follows Feng, Fang and Shen (2020), Water Resour. Res. 56, e2019WR026793, and Nearing et al. (2022),
+Hydrol. Earth Syst. Sci. 26, 5493-5513.
 """
 
 from __future__ import annotations
@@ -18,6 +23,8 @@ from caudal.points import POINTS
 DYNAMIC = [*forcing.COLS, "doy_sin", "doy_cos"]
 STATIC = ["static_lat", "static_elev", "static_log_qmean"]
 FEATURES = DYNAMIC + STATIC
+OBS = ["obs_inflow", "obs_missing"]  # v2 inputs, added by prep: observed inflow (0 where missing) and its missing flag
+MAX_HIDDEN = 15  # lead 14 hides the newest 14 days of inflow; one more covers a late CDEC value
 TARGET = "inflow"
 LOOKBACK = 365
 HIDDEN = 128
@@ -51,6 +58,8 @@ def prep(frame: pd.DataFrame, f_mean, f_std, s_target: float) -> pd.DataFrame:
     out = frame.copy()
     out[FEATURES] = (frame[FEATURES] - f_mean) / f_std
     out[TARGET] = frame[TARGET] / s_target
+    # Row d holds day d's inflow beside day d+1's forcing, so the window for a day ends with the inflow of the day before.
+    out[OBS[0]], out[OBS[1]] = out[TARGET].fillna(0.0), out[TARGET].isna().astype(float)
     return out
 
 
