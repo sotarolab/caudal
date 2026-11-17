@@ -12,6 +12,7 @@ months; delete a file's tail before a study that needs approved values.
 
 from __future__ import annotations
 
+import http.client
 import io
 import sys
 import time
@@ -25,7 +26,7 @@ from caudal.config import FLOW_DIR
 # A request older than 120 days is redirected to nwis.waterservices.usgs.gov; urllib follows it.
 IV = "https://waterservices.usgs.gov/nwis/iv/?format=rdb&sites={site}&parameterCd=00060&startDT={start}&endDT={end}"
 START = date(1987, 10, 1)  # the first day of 15-minute discharge at the Russian River gauges
-UTC_OFFSET = {"PST": 8, "PDT": 7}  # hours from the local time the service writes to UTC
+UTC_OFFSET = {"PST": 8, "PDT": 7}  # hours from the local time the service writes to UTC; another zone raises
 REFRESH_DAYS = 2
 CHUNK_DAYS = 365  # one year is 35,000 rows and took two minutes to arrive on 2026-11-17
 
@@ -56,7 +57,7 @@ def fetch(site: str, start: date, end: date) -> pd.Series:
         try:
             with urllib.request.urlopen(url, timeout=600) as r:
                 return parse(r.read().decode())
-        except OSError:  # the service for older data is slow and drops connections; wait and try again
+        except (OSError, http.client.HTTPException):  # the service for older data is slow and drops connections
             if attempt == 2:
                 raise
             time.sleep(30)
