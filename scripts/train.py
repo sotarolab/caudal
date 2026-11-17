@@ -1,5 +1,8 @@
 """Train one regional quantile LSTM on the reservoir inflow points and score it on the held-out water years.
 
+v2 reads the observed inflow of the window's days beside the weather (`frames.OBS`). In training the newest
+0 to `frames.MAX_HIDDEN` days of it are hidden at random, so the one model issues every lead.
+
 Protocol (caudal-fleet's regional arm, applied to inflow): fit through FIT_END with nothing held out, evaluate
 EVAL_START..EVAL_END, pinball loss over DEFAULT_QUANTILES, lr 1e-3, 30 epochs, lookback 365, hidden 128.
 Scoring (all days and AR days, persistence and climatology references) is `caudal.evaluate`.
@@ -27,9 +30,11 @@ from caudal.evaluate import evaluate_all, show
 from caudal.models.quantile_lstm import DEFAULT_QUANTILES, QuantileLSTM, train_quantile_epochs
 from caudal.models.sequence import SequenceDataset, get_device
 from caudal.points import TRAINED
-from caudal.training import MetricsLogger, ProgressLogger, RunArtifacts
+from caudal.training import MaskRecent, MetricsLogger, ProgressLogger, RunArtifacts
 
-VERSION = "v1"
+VERSION = "v2"
+FEATURES = F.FEATURES_V2
+EVAL_LEAD = 1  # the next day: the lead whose pooled scores the manifest records and the collapse check reads
 LR = 1e-3
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -45,10 +50,12 @@ def main(argv=None) -> int:
 
     frames = F.build_regional(points)
     torch.manual_seed(a.seed)
-    ds = SequenceDataset(list(frames["train"].values()), F.FEATURES, F.TARGET, F.LOOKBACK)
+    ds = MaskRecent(SequenceDataset(list(frames["train"].values()), FEATURES, F.TARGET, F.LOOKBACK),
+                    FEATURES, F.MAX_HIDDEN, random=True)
     loader = DataLoader(ds, batch_size=F.BATCH_SIZE, shuffle=True)
-    model = QuantileLSTM(n_features=len(F.FEATURES), hidden_size=F.HIDDEN)
-    config = {"version": VERSION, "points": list(frames["train"]), "features": F.FEATURES, "quantiles": list(DEFAULT_QUANTILES),
+    model = QuantileLSTM(n_features=len(FEATURES), hidden_size=F.HIDDEN)
+    config = {"version": VERSION, "points": list(frames["train"]), "features": FEATURES, "max_hidden": F.MAX_HIDDEN,
+              "quantiles": list(DEFAULT_QUANTILES),
               "lookback": F.LOOKBACK, "hidden": F.HIDDEN, "batch_size": F.BATCH_SIZE, "epochs": a.epochs, "lr": LR,
               "seed": a.seed, "fit_end": F.FIT_END, "eval": [F.EVAL_START, F.EVAL_END], "n_windows": len(ds)}
     art = RunArtifacts(run, config=config)
@@ -59,10 +66,10 @@ def main(argv=None) -> int:
                                    callbacks=[MetricsLogger(art), ProgressLogger(frequency=5, prefix=f"{run} ")])
     print(f"[{time.strftime('%H:%M:%S')}] pinball {losses[0]:.4f} -> {losses[-1]:.4f} ({time.time() - t0:.0f}s)", flush=True)
 
-    table = evaluate_all(model, frames, DEFAULT_QUANTILES)
-    pooled = show(table)
+    table = evaluate_all(model, frames, DEFAULT_QUANTILES, FEATURES)
+    pooled = show(table).loc[EVAL_LEAD]
     if not pooled.rel_spread >= 0.05 and not a.smoke:  # also catches NaN
-        art.update_manifest(status="collapsed", **pooled.to_dict())
+        art.update_manifest(status="collapsed", eval_lead=EVAL_LEAD, **pooled.to_dict())
         print("quantile heads COLLAPSED (see quantile_lstm docstring on lr); refusing to save the model", file=sys.stderr)
         return 1
 
@@ -70,7 +77,7 @@ def main(argv=None) -> int:
     torch.save({"state_dict": model.state_dict(), **config, "f_mean": frames["f_mean"].tolist(),
                 "f_std": frames["f_std"].tolist(), "s_target": frames["s_target"]}, MODELS_DIR / f"{run}.pt")
     table.to_csv(RESULTS_DIR / f"eval_{run}.csv")
-    art.update_manifest(status="finished", seconds=round(time.time() - t0), **pooled.to_dict())
+    art.update_manifest(status="finished", seconds=round(time.time() - t0), eval_lead=EVAL_LEAD, **pooled.to_dict())
     print(f"saved {MODELS_DIR / f'{run}.pt'} and {RESULTS_DIR / f'eval_{run}.csv'}")
     return 0
 

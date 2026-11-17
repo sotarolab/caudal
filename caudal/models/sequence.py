@@ -24,8 +24,9 @@ class SequenceDataset(Dataset):
     """Sliding-window (lookback -> next-day-target) sequences from one or more basins' daily time series.
 
     (a) Each frame is split into contiguous daily runs and windows never cross a gap;
-    (b) the target may be NaN (those days yield no sample -- streamflow is never an input
-    feature, so a NaN target day still serves as history); (c) windows are sliced lazily in
+    (b) the target may be NaN (those days yield no sample -- the target column is never read as
+    an input, so a NaN target day still serves as history; a model that takes observed flow reads
+    it from its own NaN-free feature columns, see `caudal.frames.OBS`); (c) windows are sliced lazily in
     ``__getitem__`` (views into one array per run, no copies).
     """
 

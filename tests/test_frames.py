@@ -20,3 +20,14 @@ def test_build_frame_shifts_forcing_and_keeps_target_gaps(tmp_path, monkeypatch)
     assert len(fr) == 39 and fr["precip"].iloc[0] == 1.0  # row d holds the forcing of day d+1
     assert fr[frames.TARGET].isna().sum() == 5 + 1 and fr[frames.TARGET].iloc[-1] == 100.0
     assert list(fr.columns[-len(frames.STATIC):]) == frames.STATIC and np.isclose(fr["static_log_qmean"].iloc[0], np.log(100.0))
+
+
+def test_prep_adds_observed_inflow_and_missing_flag():
+    idx = pd.date_range("2000-01-01", periods=4, freq="D")
+    fr = pd.DataFrame({c: [1.0, 2.0, 3.0, 4.0] for c in frames.FEATURES}, index=idx)
+    fr[frames.TARGET] = [50.0, np.nan, 150.0, np.nan]
+    n = len(frames.FEATURES)
+    z = frames.prep(fr, np.full(n, 2.0), np.full(n, 2.0), s_target=100.0)
+    assert z["obs_inflow"].tolist() == [0.5, 0.0, 1.5, 0.0] and z["obs_missing"].tolist() == [0.0, 1.0, 0.0, 1.0]
+    assert z[frames.FEATURES[0]].tolist() == [-0.5, 0.0, 0.5, 1.0]  # v1's features are standardized as before
+    assert z[frames.TARGET].isna().tolist() == [False, True, False, True]  # the target keeps its gaps

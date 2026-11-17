@@ -197,7 +197,7 @@ def _validate_quantile(model: QuantileLSTM, loader, device, q: torch.Tensor) -> 
 
 @torch.no_grad()
 def predict_quantiles(
-    model: QuantileLSTM, frame, feature_cols, target_col, lookback, batch_size: int = 256
+    model: QuantileLSTM, frame, feature_cols, target_col, lookback, batch_size: int = 256, wrap=None
 ):
     """Quantile predictions over an evaluation frame.
 
@@ -205,7 +205,8 @@ def predict_quantiles(
     -------
     (preds, obs, index) : (np.ndarray (n, n_quantiles), np.ndarray (n,), pd.DatetimeIndex)
         Aligned one-to-one, using the same gap-aware windowing as the Gaussian arm so the two
-        are scored on identical days.
+        are scored on identical days. `wrap`, if given, maps the window dataset to the one that is read
+        (e.g. `caudal.training.MaskRecent`, to hide the newest inflow days); it must keep the order.
     """
     import pandas as pd
     from torch.utils.data import DataLoader
@@ -216,7 +217,7 @@ def predict_quantiles(
     model.to(device)
     model.eval()
     ds = SequenceDataset([frame], feature_cols, target_col, lookback)
-    loader = DataLoader(ds, batch_size=batch_size, shuffle=False)
+    loader = DataLoader(wrap(ds) if wrap else ds, batch_size=batch_size, shuffle=False)
 
     preds, obs = [], []
     for x, y in loader:

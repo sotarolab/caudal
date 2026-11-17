@@ -3,12 +3,17 @@
 AR days: a qualifying landfalling AR (CW3E catalog, AR scale >= 3) touched the coast within 1.5 degrees of the
 dam's latitude (caudal-fleet's definition, `caudal.data.cw3e`). Those are the days the ledger exists for.
 
+Each point is scored at several leads. At lead L the model sees no inflow newer than L + 1 days before the
+target day (what an issue L days ahead has in hand), and persistence is that same newest observation, on the
+days it exists. Lead 0 is the day-ahead simulation v1 was first scored on.
+
     python -m caudal.evaluate quantile_inflow_v1_s0      # re-score a saved checkpoint, writes data/results/eval_<run>.csv
 """
 
 from __future__ import annotations
 
 import sys
+from functools import partial
 
 import numpy as np
 import pandas as pd
@@ -20,6 +25,11 @@ from caudal.data.cw3e import basin_ar_frame
 from caudal.models.quantile_lstm import QuantileLSTM, predict_quantiles
 from caudal.points import POINTS
 from caudal.scores import crps_ensemble
+from caudal.training import MaskRecent
+
+# shortcut: every lead is fed the observed weather (ERA5), so the scores above lead 1 leave out the weather
+# forecast's own error; lift it when archived forecast forcing covers the evaluation years.
+LEADS = (0, 1, 7, 14)
 
 
 def crps_climatology(obs: pd.Series, fit: pd.Series) -> np.ndarray:
@@ -34,20 +44,27 @@ def nse(sim: np.ndarray, obs: np.ndarray) -> float:
     return float(1 - np.sum((obs - sim) ** 2) / np.sum((obs - obs.mean()) ** 2))
 
 
-def evaluate(model, frames: dict, lid: str, quantiles) -> dict | None:
+def persistence(target: pd.Series, idx: pd.DatetimeIndex, lead: int) -> np.ndarray:
+    """The newest inflow a forecast at this lead could see: the observation lead + 1 days before each target day."""
+    return target.reindex(idx - pd.Timedelta(days=lead + 1)).to_numpy()
+
+
+def evaluate(model, frames: dict, lid: str, quantiles, features=F.FEATURES, lead: int = 0) -> dict | None:
     q = {x: i for i, x in enumerate(quantiles)}
     raw, s = frames["raw"][lid], frames["s_target"][lid]
     hist = raw.loc[: F.EVAL_START].iloc[-(F.LOOKBACK + 1) : -1]
     ev = F.prep(pd.concat([hist, raw.loc[F.EVAL_START : F.EVAL_END]]), frames["f_mean"], frames["f_std"], s)
-    preds, obs_s, idx = predict_quantiles(model, ev, F.FEATURES, F.TARGET, F.LOOKBACK)
+    hide = None  # a model without the inflow inputs (v1) has nothing to hide
+    if lead and F.OBS[0] in features:
+        hide = partial(MaskRecent, features=features, days=lead)
+    preds, obs_s, idx = predict_quantiles(model, ev, features, F.TARGET, F.LOOKBACK, wrap=hide)
     if len(idx) == 0:
         return None
     preds, obs = np.clip(preds * s, 0, None), obs_s * s
-    yesterday = raw[F.TARGET].reindex(idx - pd.Timedelta(days=1)).to_numpy()
-    crps = {"model": crps_ensemble(preds, obs), "persistence": np.abs(yesterday - obs),
+    crps = {"model": crps_ensemble(preds, obs), "persistence": np.abs(persistence(raw[F.TARGET], idx, lead) - obs),
             "climatology": crps_climatology(pd.Series(obs, index=idx), raw.loc[: F.FIT_END, F.TARGET])}
     ar = basin_ar_frame(POINTS[lid][2], F.EVAL_START, F.EVAL_END)["is_ar_day"].reindex(idx).fillna(False).to_numpy()
-    row = {"lid": lid, "n_days": len(idx), "n_ar_days": int(ar.sum())}
+    row = {"lead": lead, "lid": lid, "n_days": len(idx), "n_ar_days": int(ar.sum())}
     for name, v in crps.items():
         row[f"crps_{name}"] = float(np.nanmean(v))
         row[f"crps_{name}_ar"] = float(np.nanmean(v[ar])) if ar.any() else np.nan
@@ -57,9 +74,10 @@ def evaluate(model, frames: dict, lid: str, quantiles) -> dict | None:
     return row
 
 
-def evaluate_all(model, frames: dict, quantiles) -> pd.DataFrame:
-    rows = [r for lid in frames["train"] if (r := evaluate(model, frames, lid, quantiles))]
-    return pd.DataFrame(rows).set_index("lid")
+def evaluate_all(model, frames: dict, quantiles, features=F.FEATURES, leads=LEADS) -> pd.DataFrame:
+    """One row per lead and point, indexed (lead, lid)."""
+    rows = [r for lead in leads for lid in frames["train"] if (r := evaluate(model, frames, lid, quantiles, features, lead))]
+    return pd.DataFrame(rows).set_index(["lead", "lid"])
 
 
 def load_model(run: str) -> tuple[QuantileLSTM, dict]:
@@ -70,9 +88,10 @@ def load_model(run: str) -> tuple[QuantileLSTM, dict]:
 
 
 def show(table: pd.DataFrame) -> pd.DataFrame:
-    pooled = table.drop(columns=["n_days", "n_ar_days"]).mean().rename("pooled")
+    """Print the table and the mean over points at each lead; return that mean, indexed by lead."""
+    pooled = table.drop(columns=["n_days", "n_ar_days"]).groupby("lead").mean()
     pd.set_option("display.width", 200)
-    print(pd.concat([table, pooled.to_frame().T]).round(3).to_string(), flush=True)
+    print(table.round(3).to_string(), "\npooled over points, by lead:", pooled.round(3).to_string(), sep="\n", flush=True)
     return pooled
 
 
@@ -80,7 +99,7 @@ if __name__ == "__main__":
     run = sys.argv[1]
     model, ckpt = load_model(run)
     frames = F.build_regional(ckpt["points"], ckpt["fit_end"])
-    table = evaluate_all(model, frames, ckpt["quantiles"])
+    table = evaluate_all(model, frames, ckpt["quantiles"], ckpt["features"])
     show(table)
     table.to_csv(RESULTS_DIR / f"eval_{run}.csv")
     print(f"wrote {RESULTS_DIR / f'eval_{run}.csv'}")
