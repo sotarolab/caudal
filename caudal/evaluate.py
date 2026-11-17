@@ -4,9 +4,8 @@ AR days: a qualifying landfalling AR (CW3E catalog, AR scale >= 3) touched the c
 dam's latitude (caudal-fleet's definition, `caudal.data.cw3e`). Those are the days the ledger exists for.
 
 Each point is scored at several leads. At lead L the model sees no inflow newer than L + 1 days before the
-target day (what an issue L days ahead has in hand), and persistence is that same newest observation. Lead 0
-is the day-ahead simulation v1 was first scored on. The weather is the observed one (ERA5) at every lead, so
-the scores at leads above 1 leave out the weather forecast's own error.
+target day (what an issue L days ahead has in hand), and persistence is that same newest observation, on the
+days it exists. Lead 0 is the day-ahead simulation v1 was first scored on.
 
     python -m caudal.evaluate quantile_inflow_v1_s0      # re-score a saved checkpoint, writes data/results/eval_<run>.csv
 """
@@ -28,6 +27,8 @@ from caudal.points import POINTS
 from caudal.scores import crps_ensemble
 from caudal.training import MaskRecent
 
+# shortcut: every lead is fed the observed weather (ERA5), so the scores above lead 1 leave out the weather
+# forecast's own error; lift it when archived forecast forcing covers the evaluation years.
 LEADS = (0, 1, 7, 14)
 
 
@@ -55,7 +56,7 @@ def evaluate(model, frames: dict, lid: str, quantiles, features=F.FEATURES, lead
     ev = F.prep(pd.concat([hist, raw.loc[F.EVAL_START : F.EVAL_END]]), frames["f_mean"], frames["f_std"], s)
     hide = None  # a model without the inflow inputs (v1) has nothing to hide
     if lead and F.OBS[0] in features:
-        hide = partial(MaskRecent, value=features.index(F.OBS[0]), flag=features.index(F.OBS[1]), days=lead)
+        hide = partial(MaskRecent, features=features, days=lead)
     preds, obs_s, idx = predict_quantiles(model, ev, features, F.TARGET, F.LOOKBACK, wrap=hide)
     if len(idx) == 0:
         return None

@@ -11,13 +11,16 @@ from __future__ import annotations
 import torch
 from torch.utils.data import Dataset
 
+from caudal.frames import OBS
+
 
 class MaskRecent(Dataset):
-    """Wrap a (window, target) dataset. `value` and `flag` are the columns of the observed inflow and of its
-    missing flag; the newest `days` rows are hidden, or a uniform draw from 0..days when `random`."""
+    """Wrap a (window, target) dataset whose window columns are `features`, which must hold `frames.OBS`.
+    The newest `days` rows of the observed inflow are hidden, or a uniform draw from 0..days when `random`."""
 
-    def __init__(self, ds: Dataset, value: int, flag: int, days: int, random: bool = False):
-        self.ds, self.value, self.flag, self.days, self.random = ds, value, flag, days, random
+    def __init__(self, ds: Dataset, features: list[str], days: int, random: bool = False):
+        self.ds, self.days, self.random = ds, days, random
+        self.value, self.flag = (features.index(c) for c in OBS)
 
     def __len__(self) -> int:
         return len(self.ds)

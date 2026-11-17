@@ -24,6 +24,7 @@ DYNAMIC = [*forcing.COLS, "doy_sin", "doy_cos"]
 STATIC = ["static_lat", "static_elev", "static_log_qmean"]
 FEATURES = DYNAMIC + STATIC
 OBS = ["obs_inflow", "obs_missing"]  # v2 inputs, added by prep: observed inflow (0 where missing) and its missing flag
+FEATURES_V2 = FEATURES + OBS
 MAX_HIDDEN = 15  # lead 14 hides the newest 14 days of inflow; one more covers a late CDEC value
 TARGET = "inflow"
 LOOKBACK = 365
