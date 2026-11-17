@@ -1,12 +1,14 @@
 name: Issue the daily forecasts
 
 # quantile_inflow_v1_s0 for its 11 points, every day at 14:20 UTC: the 06z forecast cycle has reached
-# Open-Meteo by then, and hapi's own archive run (every 6 hours at :37) comes after. The checkpoint,
+# Open-Meteo by then, and hapi's own archive run (every hour at :37) comes after. The checkpoint,
 # the ERA5 forcing archive and the observed inflow all live on hapi's data branch; the forecasts and
 # the extended forcing are committed back to it, so the inputs of every issued forecast are on record.
 on:
   schedule:
     - cron: '20 14 * * *'
+  # shortcut: a second run on the same day overwrites that day's forecasts (issue.py writes today's file
+  # unconditionally), against "issued once, never revised"; lift it with the guard in issue.py.
   workflow_dispatch: {}
 
 concurrency:
@@ -43,5 +45,9 @@ jobs:
           git add data/forecasts data/forcing
           git diff --cached --quiet && exit 0
           git commit -q -m "issue quantile_inflow_v1_s0 $(date -u +%Y-%m-%d)"
-          git pull -q --rebase origin data   # hapi's archive job may have pushed meanwhile
-          git push -q origin HEAD:data
+          # hapi's archive job pushes to this branch every hour; try again if it lands between the pull and the push
+          for attempt in 1 2 3; do
+            git pull -q --rebase origin data && git push -q origin HEAD:data && exit 0
+            sleep 10
+          done
+          exit 1
