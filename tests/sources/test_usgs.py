@@ -66,6 +66,19 @@ def test_update_archive_extends_and_keeps_what_it_has(tmp_path, monkeypatch):
     second = usgs.update_archive("x", date(2019, 1, 5), fetch)
     assert asked[1] == (date(2018, 12, 31), date(2019, 1, 5))  # the last two days are read again, from a day before
     assert second.index[-1] == pd.Timestamp("2019-01-05 23:00") and first.index.isin(second.index).all()
-    third = usgs.update_archive("x", date(2019, 1, 5), lambda *a: quarter_hours("2030-01-01", "2030-01-01")[:0])
-    assert third.equals(second)  # a read that brings nothing loses nothing
-    assert usgs.load("x").equals(third)
+    with pytest.raises(OSError, match="no flow at all"):  # an empty answer for a whole span stops the update
+        usgs.update_archive("x", date(2019, 1, 5), lambda *a: quarter_hours("2030-01-01", "2030-01-01")[:0])
+    assert usgs.load("x").equals(second)  # and loses nothing
+
+
+def test_days_the_service_refuses_are_left_out_and_the_rest_is_read():
+    bad = date(2019, 1, 3)
+
+    def fetch(site, start, end):
+        if start <= bad <= end:
+            raise OSError("503")
+        return quarter_hours(f"{start} 00:00", f"{end} 23:45")
+
+    q = usgs.fetch_around_bad_days("x", date(2019, 1, 1), date(2019, 1, 8), fetch)
+    days = sorted(set(q.index.date))
+    assert days == [date(2019, 1, d) for d in (1, 2, 4, 5, 6, 7, 8)]
