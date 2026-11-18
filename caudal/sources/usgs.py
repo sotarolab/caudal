@@ -53,14 +53,14 @@ def hourly(q: pd.Series) -> pd.Series:
 
 def fetch(site: str, start: date, end: date) -> pd.Series:
     url = IV.format(site=site, start=start, end=end)
-    for attempt in range(3):
+    for attempt in range(5):
         try:
             with urllib.request.urlopen(url, timeout=600) as r:
                 return parse(r.read().decode())
-        except (OSError, http.client.HTTPException):  # the service for older data is slow and drops connections
-            if attempt == 2:
+        except (OSError, http.client.HTTPException):  # the service for older data is slow, drops connections
+            if attempt == 4:  # and answered 503 to three sites at once on 2026-11-17; the waits add up to 7.5 min
                 raise
-            time.sleep(30)
+            time.sleep(30 * 2**attempt)
     raise AssertionError("unreachable")
 
 
