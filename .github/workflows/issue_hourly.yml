@@ -1,0 +1,53 @@
+name: Issue the hourly flow forecasts
+
+# quantile_flow_hourly_v1_s0 for the three Russian River gauges, four times a day at :25, when the hour's flow
+# has reached USGS. The checkpoint lives under data/models/ on hapi's data branch. The weather and the flow are
+# read from Open-Meteo and USGS at run time, so nothing else is needed from the branch. The forecasts are
+# committed back to it.
+on:
+  schedule:
+    - cron: '25 0,6,12,18 * * *'
+  # shortcut: a second run in the same hour overwrites that hour's files, against "issued once, never
+  # revised"; lift it with a guard in issue_hourly.py.
+  workflow_dispatch: {}
+
+concurrency:
+  group: issue-hourly
+  cancel-in-progress: false
+
+jobs:
+  issue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CAUDAL_DATA: ${{ github.workspace }}/hapi-data/data
+      HAPI_DATA: ${{ github.workspace }}/hapi-data/data
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: sotarolab/hapi
+          ref: data
+          path: hapi-data
+          token: ${{ secrets.HAPI_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -e . --extra-index-url https://download.pytorch.org/whl/cpu
+      - run: python scripts/issue_hourly.py --out "$HAPI_DATA"
+      # A gauge that failed leaves the job red; the gauges that issued are still committed.
+      - name: Commit the forecasts
+        if: ${{ !cancelled() }}
+        working-directory: hapi-data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/forecasts
+          git diff --cached --quiet && exit 0
+          git commit -q -m "issue quantile_flow_hourly_v1_s0 $(date -u +%Y-%m-%dT%HZ)"
+          # hapi's archive job pushes to this branch every hour; try again if it lands between the pull and the push
+          for attempt in 1 2 3; do
+            git pull -q --rebase origin data && git push -q origin HEAD:data && exit 0
+            sleep 10
+          done
+          exit 1
