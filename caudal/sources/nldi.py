@@ -11,7 +11,9 @@ import json
 import urllib.request
 
 BASIN = "https://api.water.usgs.gov/nldi/linked-data/nwissite/USGS-{site}/basin?f=json"
-STEP = 0.125  # degrees: half a cell of ERA5, 14 km north to south at these latitudes
+# Degrees: the grid of ERA5. A finer lattice costs more than the weather source gives away: one point and year
+# of hourly data counts as 26 calls against Open-Meteo's 10,000 a day.
+STEP = 0.25
 
 
 def outline(geojson: dict) -> list[tuple[float, float]]:

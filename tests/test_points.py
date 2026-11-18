@@ -27,4 +27,4 @@ def test_upstream_of_guerneville_is_healdsburg_and_lake_sonoma():
 def test_rain_points_of_hopland_are_the_lattice_inside_its_basin():
     assert points.RAIN_POINTS["HOPC1"] == nldi.lattice(nldi.outline(json.loads(HOPLAND.read_text())))
     assert set(points.RAIN_POINTS) == set(points.GAUGES)
-    assert set(points.RAIN_POINTS["HOPC1"]) < set(points.RAIN_POINTS["HEAC1"]) < set(points.RAIN_POINTS["GUEC1"])
+    assert set(points.RAIN_POINTS["HOPC1"]) < set(points.RAIN_POINTS["HEAC1"]) <= set(points.RAIN_POINTS["GUEC1"])
