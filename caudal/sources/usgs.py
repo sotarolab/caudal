@@ -12,6 +12,7 @@ months; delete a file's tail before a study that needs approved values.
 
 from __future__ import annotations
 
+import gzip
 import http.client
 import io
 import sys
@@ -28,7 +29,7 @@ IV = "https://waterservices.usgs.gov/nwis/iv/?format=rdb&sites={site}&parameterC
 START = date(1987, 10, 1)  # the first day of 15-minute discharge at the Russian River gauges
 UTC_OFFSET = {"PST": 8, "PDT": 7}  # hours from the local time the service writes to UTC; another zone raises
 REFRESH_DAYS = 2
-CHUNK_DAYS = 365  # one year is 35,000 rows and took two minutes to arrive on 2026-11-17
+CHUNK_DAYS = 120  # a year-long request was answered 503 on 2026-11-17; half a year, compressed, took 23 s
 
 
 def parse(text: str) -> pd.Series:
@@ -55,8 +56,10 @@ def fetch(site: str, start: date, end: date) -> pd.Series:
     url = IV.format(site=site, start=start, end=end)
     for attempt in range(5):
         try:
-            with urllib.request.urlopen(url, timeout=600) as r:
-                return parse(r.read().decode())
+            # compressed, the answer is a sixth of the size, and the service sends about 11 KB a second
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"Accept-Encoding": "gzip"}), timeout=600) as r:
+                body = r.read()
+            return parse((gzip.decompress(body) if body[:2] == b"\x1f\x8b" else body).decode())
         except (OSError, http.client.HTTPException):  # the service for older data is slow, drops connections
             if attempt == 4:  # and answered 503 to three sites at once on 2026-11-17; the waits add up to 7.5 min
                 raise
