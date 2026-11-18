@@ -60,3 +60,13 @@ def test_predict_quantiles_reads_the_wrapped_windows():
     hidden, _, _ = predict_quantiles(model, fr, *args, wrap=partial(MaskRecent, features=FEATURES, days=2))
     assert np.allclose(hidden, predict_quantiles(model, by_hand, *args)[0])
     assert not np.allclose(hidden, predict_quantiles(model, fr, *args)[0])
+
+
+def test_mask_hides_every_flow_pair_it_is_given():
+    features = ["rain", "obs_flow", "obs_missing", "up1_flow", "up1_missing"]
+    x = torch.ones(1, 6, 5)
+    x[:, :, [2, 4]] = 0.0
+    ds = TensorDataset(x, torch.tensor([1.0]))
+    got, _ = MaskRecent(ds, features, days=2, pairs=[("obs_flow", "obs_missing"), ("up1_flow", "up1_missing")])[0]
+    assert got[-2:, [1, 3]].sum() == 0 and got[-2:, [2, 4]].tolist() == [[1.0, 1.0], [1.0, 1.0]]
+    assert got[:-2, [1, 3]].min() == 1 and got[:, 0].min() == 1  # older flow and the weather are untouched
