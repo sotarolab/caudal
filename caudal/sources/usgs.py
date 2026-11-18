@@ -55,12 +55,14 @@ def hourly(q: pd.Series) -> pd.Series:
     return q.resample("1h", closed="right", label="right").mean().dropna()
 
 
-def fetch(site: str, start: date, end: date) -> pd.Series:
+def fetch(site: str, start: date, end: date, timeout: float = 600, wait: float = 20) -> pd.Series:
+    """15-minute discharge for a span of days. The defaults are for building an archive from the slow service
+    for older data; an issue passes a short `timeout` and `wait`."""
     url = IV.format(site=site, start=start, end=end)
     for attempt in range(3):
         try:
             # compressed, the answer is a sixth of the size, and the service sends about 11 KB a second
-            with urllib.request.urlopen(urllib.request.Request(url, headers={"Accept-Encoding": "gzip"}), timeout=600) as r:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"Accept-Encoding": "gzip"}), timeout=timeout) as r:
                 body = r.read()
             return parse((gzip.decompress(body) if body[:2] == b"\x1f\x8b" else body).decode())
         except urllib.error.HTTPError:  # a refusal is the same on the next try: let the caller halve the span
@@ -68,17 +70,18 @@ def fetch(site: str, start: date, end: date) -> pd.Series:
         except (OSError, http.client.HTTPException):  # the service for older data is slow and drops connections
             if attempt == 2:
                 raise
-            time.sleep(20)
+            time.sleep(wait)
     raise AssertionError("unreachable")
 
 
 def fetch_around_bad_days(site: str, start: date, end: date, fetch=fetch, whole: bool = True) -> pd.Series:
     """`fetch`, but a span the service refuses is halved until the days it cannot serve are found and left
     out. On 2026-11-17 any request holding some days of March and April 1990 at Hopland was answered 503.
-    A span refused day after day with nothing read is the service being down, and raises."""
+    A span refused day after day with nothing read is the service being down, and raises. A request that
+    gets no answer at all (a timeout, a dropped connection) is not halved: it raises as it is."""
     try:
         return fetch(site, start, end)
-    except (OSError, http.client.HTTPException) as e:
+    except urllib.error.HTTPError as e:
         if start == end:
             print(f"left out {site} {start}: {e}", file=sys.stderr)
             return pd.Series(dtype=float, name="cfs", index=pd.DatetimeIndex([], name="time"))

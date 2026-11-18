@@ -1,3 +1,4 @@
+import urllib.error
 from datetime import date
 from pathlib import Path
 
@@ -74,9 +75,11 @@ def test_update_archive_extends_and_keeps_what_it_has(tmp_path, monkeypatch):
 def test_days_the_service_refuses_are_left_out_and_the_rest_is_read():
     bad = date(2019, 1, 3)
 
+    refused = urllib.error.HTTPError("https://example", 503, "Service Unavailable", None, None)  # type: ignore[arg-type]
+
     def fetch(site, start, end):
         if start <= bad <= end:
-            raise OSError("503")
+            raise refused
         return quarter_hours(f"{start} 00:00", f"{end} 23:45")
 
     q = usgs.fetch_around_bad_days("x", date(2019, 1, 1), date(2019, 1, 8), fetch)
@@ -84,7 +87,37 @@ def test_days_the_service_refuses_are_left_out_and_the_rest_is_read():
     assert days == [date(2019, 1, d) for d in (1, 2, 4, 5, 6, 7, 8)]
 
     def down(site, start, end):
-        raise OSError("503")
+        raise refused
 
     with pytest.raises(OSError, match="refused every day"):  # nothing read at all: the service is down
         usgs.fetch_around_bad_days("x", date(2019, 1, 1), date(2019, 1, 4), down)
+    asked = []
+
+    def silent(site, start, end):
+        asked.append((start, end))
+        raise TimeoutError("timed out")
+
+    with pytest.raises(TimeoutError):  # no answer at all is not a bad day: one request, no halving
+        usgs.fetch_around_bad_days("x", date(2019, 1, 1), date(2019, 1, 8), silent)
+    assert len(asked) == 1
+
+
+def test_fetch_passes_its_timeout_to_the_request(monkeypatch):
+    seen = {}
+
+    class Answer:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return HOPLAND.read_bytes()
+
+    def urlopen(request, timeout):
+        seen["timeout"] = timeout
+        return Answer()
+
+    monkeypatch.setattr(usgs.urllib.request, "urlopen", urlopen)
+    assert len(usgs.fetch("11462500", date(2019, 2, 26), date(2019, 2, 26), timeout=60)) == 96 and seen["timeout"] == 60

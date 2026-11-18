@@ -41,3 +41,21 @@ def test_basin_mean_is_over_the_hours_every_point_has():
     b = openmeteo.parse(answer("2019-01-01T02:00", 4, rain=3.0))
     m = openmeteo.basin_mean([a, b])
     assert list(m.index) == list(pd.date_range("2019-01-01 02:00", periods=2, freq="h")) and m.precip.tolist() == [2.0, 2.0]
+
+
+def test_forecast_gives_up_after_four_quick_tries(monkeypatch):
+    asked, waits = [], []
+
+    def urlopen(url, timeout):
+        asked.append(timeout)
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(openmeteo.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(openmeteo.time, "sleep", waits.append)
+    try:
+        openmeteo.forecast(39.25, -123.0)
+    except TimeoutError:
+        pass
+    else:
+        raise AssertionError("a feed that never answers gave a forecast")
+    assert asked == [60, 60, 60, 60] and waits == [5, 10, 20]  # under five minutes, not the archive's 45
