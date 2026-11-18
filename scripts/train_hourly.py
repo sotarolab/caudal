@@ -1,7 +1,8 @@
 """Train the hourly flow model for the Russian River gauges and score it on the held-out water years.
 
 One regional quantile LSTM over the three gauges: fit through water year 2015, the newest 0 to MAX_HIDDEN hours
-of every flow input hidden at random, pinball loss, lr 1e-3. An epoch is a random draw of --samples windows.
+of every flow input hidden at random, the target taken as its change from the newest flow left, pinball loss,
+lr 1e-3. An epoch is a random draw of --samples windows.
 Needs the archives: `python -m caudal.sources.usgs <sites>` and `python -m caudal.sources.openmeteo`.
 
     python scripts/train_hourly.py --seed 0      # writes data/models/<run>.pt and data/results/eval_<run>.csv
@@ -22,7 +23,7 @@ from caudal.config import MODELS_DIR, RESULTS_DIR
 from caudal.models.quantile_lstm import DEFAULT_QUANTILES, QuantileLSTM, train_quantile_epochs
 from caudal.models.sequence import SequenceDataset, get_device
 from caudal.points import GAUGES
-from caudal.training import MaskRecent, MetricsLogger, ProgressLogger, RunArtifacts
+from caudal.training import Anchor, MaskRecent, MetricsLogger, ProgressLogger, RunArtifacts
 
 LR = 1e-3
 
@@ -43,6 +44,7 @@ def main(argv=None) -> int:
     torch.manual_seed(a.seed)
     ds = MaskRecent(SequenceDataset(list(frames["train"].values()), H.FEATURES, H.TARGET, H.LOOKBACK),
                     H.FEATURES, H.MAX_HIDDEN, random=True, pairs=H.PAIRS)
+    ds = Anchor(ds, H.FEATURES, H.PAIRS[0])  # the target is the change from the newest flow left in the window
     loader = DataLoader(ds, batch_size=H.BATCH_SIZE, sampler=RandomSampler(ds, replacement=True, num_samples=a.samples))
     model = QuantileLSTM(n_features=len(H.FEATURES), hidden_size=H.HIDDEN)
     config = {"product": H.PRODUCT, "points": list(frames["train"]), "features": H.FEATURES, "pairs": H.PAIRS,

@@ -4,7 +4,8 @@ and the function that issues.
 One regional quantile LSTM reads, for each gauge and hour, a window of the last LOOKBACK hours: the basin mean
 of the weather, running rainfall totals, and the observed flow of the gauge and of the points upstream of it,
 each flow with a missing flag. The newest hours of every flow are hidden at random in training, so one model
-serves every lead (`caudal.training.MaskRecent`). Observed flow as an input follows Feng, Fang and Shen (2020)
+serves every lead (`caudal.training.MaskRecent`), and the model predicts the change from the newest flow it can
+see (`caudal.training.Anchor`), so a forecast starts from the last observation. Observed flow as an input follows Feng, Fang and Shen (2020)
 and Nearing et al. (2022); the window setup follows Kratzert et al. (2019), Hydrol. Earth Syst. Sci. 23,
 5089-5110.
 
@@ -15,8 +16,6 @@ before the target hidden, as if the hour of the issue had not arrived yet; the i
 
 from __future__ import annotations
 
-from functools import partial
-
 import numpy as np
 import pandas as pd
 
@@ -24,7 +23,7 @@ from caudal.models.quantile_lstm import predict_quantiles
 from caudal.points import GAUGES, OUTFLOW, RAIN_POINTS, upstream
 from caudal.scores import crps_ensemble
 from caudal.sources import openmeteo, usgs
-from caudal.training import MaskRecent
+from caudal.training import Anchor, MaskRecent
 
 PRODUCT = "quantile_flow_hourly_v1"
 LEADS = 120  # hours
@@ -101,14 +100,23 @@ def build_regional(lids: list[str], frames: dict[str, pd.DataFrame] | None = Non
     return {"train": train, "raw": raw, "s_target": s_target, "qmean": qmean, "f_mean": f_mean, "f_std": f_std}
 
 
+def windows(lead: int | None = None):
+    """What a window dataset is wrapped in before the model reads it: the newest `lead` hours of every flow
+    hidden (none when the frame itself has no flow there, as at an issue), then the target taken as its change
+    from the newest flow left."""
+    def wrap(ds):
+        return Anchor(MaskRecent(ds, FEATURES, lead, pairs=PAIRS) if lead else ds, FEATURES, PAIRS[0])
+    return wrap
+
+
 def evaluate(model, frames: dict, lid: str, lead: int) -> dict:
     """Scores of one gauge at one lead over the evaluation years, in cfs."""
     raw, s = frames["raw"][lid], frames["s_target"][lid]
     history = raw.loc[:EVAL_START].iloc[-(LOOKBACK + 1) : -1]
     ev = prep(pd.concat([history, raw.loc[EVAL_START:EVAL_END]]), frames["f_mean"], frames["f_std"], s)
-    hide = partial(MaskRecent, features=FEATURES, days=lead, pairs=PAIRS)
-    preds, obs, idx = predict_quantiles(model, ev, FEATURES, TARGET, LOOKBACK, batch_size=4096, wrap=hide)
-    preds, obs = preds * s, obs * s
+    change, moved, idx = predict_quantiles(model, ev, FEATURES, TARGET, LOOKBACK, batch_size=4096, wrap=windows(lead))
+    obs = ev[TARGET].reindex(idx).to_numpy()
+    preds, obs = (change + (obs - moved)[:, None]) * s, obs * s  # obs - moved is the newest flow the window showed
     last = raw[TARGET].reindex(idx - pd.Timedelta(hours=lead + 1)).to_numpy()  # the newest flow the forecast saw
     ok = np.isfinite(last)
     high = ok & (obs >= raw.loc[:FIT_END, TARGET].quantile(HIGH))
@@ -136,7 +144,9 @@ def issue_point(model, ckpt: dict, lid: str, hour: pd.Timestamp, weather: pd.Dat
     frame = build_frame(lid, weather, [f.loc[:hour] for f in flows], qmean=ckpt["qmean"][lid])
     z = prep(frame, np.array(ckpt["f_mean"]), np.array(ckpt["f_std"]), ckpt["s_target"][lid])
     z[TARGET] = z[TARGET].fillna(0.0)  # windows are built only on hours with a target; the value is never read
-    preds, _, idx = predict_quantiles(model, z, ckpt["features"], TARGET, ckpt["lookback"], batch_size=BATCH_SIZE)
+    change, moved, idx = predict_quantiles(model, z, ckpt["features"], TARGET, ckpt["lookback"], batch_size=BATCH_SIZE,
+                                           wrap=windows())
+    preds = change - moved[:, None]  # the target is 0 here, so -moved is the newest observed flow
     out = pd.DataFrame(np.clip(preds * ckpt["s_target"][lid], 0, None).round(1), index=idx,
                        columns=[f"q{int(round(q * 100)):02d}" for q in ckpt["quantiles"]])
     out = out[out.index > hour]

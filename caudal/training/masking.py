@@ -35,3 +35,22 @@ class MaskRecent(Dataset):
             for value, flag in self.pairs:
                 x[-m:, value], x[-m:, flag] = 0.0, 1.0
         return x, y
+
+
+class Anchor(Dataset):
+    """Wrap a (window, target) dataset so the target is its change from the newest flow the window shows: the
+    last row of the `pair`'s value column whose flag is 0, or 0 when every row is hidden. A model trained on
+    this starts from the last observation, and one that has learned nothing is persistence. The prediction is
+    turned back into a flow by adding that newest flow, which is the true target minus the target returned here."""
+
+    def __init__(self, ds: Dataset, features: list[str], pair=OBS):
+        self.ds = ds
+        self.value, self.flag = (features.index(c) for c in pair)
+
+    def __len__(self) -> int:
+        return len(self.ds)
+
+    def __getitem__(self, i: int) -> tuple[torch.Tensor, torch.Tensor]:
+        x, y = self.ds[i]
+        seen = torch.nonzero(x[:, self.flag] == 0)
+        return x, y - (x[seen[-1, 0], self.value] if len(seen) else 0.0)
