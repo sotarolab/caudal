@@ -7,6 +7,9 @@ Regulation decides what the model is asked to predict:
 
 Coordinates and elevation (ft) are the CDEC station's, i.e. the dam. WRS, DNP, CLE, INV have negative computed
 inflows at low flow and are archived in hapi but not scored or trained on. HETC1 and CMPC1 have no CDEC inflow.
+
+The flood gauges are rows of GAUGES. DOWNSTREAM links every point to the next forecast point down the river,
+and RAIN_POINTS lists where each gauge's basin is sampled for rainfall.
 """
 
 # CNRFC id: (CDEC station, name, latitude, longitude, dam elevation ft)
@@ -35,3 +38,44 @@ REGULATION = {lid: "inflow" for lid in POINTS}
 REGULATION |= {lid: "handoff" for lid in ["HOPC1", "HEAC1", "GUEC1"]}  # Russian River below Mendocino / Sonoma
 REGULATION |= {lid: "natural" for lid in ["NVRC1", "FTSC1", "SCOC1", "LEGC1", "BRGC1", "ARCC1", "ORIC1",
                                           "FTDC1", "MHBC1"]}
+
+# CNRFC id: (USGS site that measures its discharge, name, latitude, longitude)
+# GUEC1: the NWS gauge is at Johnsons Beach (USGS 11467002), which records stage only. Its discharge is taken
+# at Hacienda Bridge, upstream, which drains 1,338 of Johnsons Beach's 1,353 square miles.
+GAUGES = {
+    "HOPC1": ("11462500", "Russian River near Hopland", 39.027, -123.131),
+    "HEAC1": ("11464000", "Russian River near Healdsburg", 38.613, -122.836),
+    "GUEC1": ("11467000", "Russian River at Hacienda Bridge near Guerneville", 38.508, -122.928),
+}
+
+# The river network: each point names the next forecast point downstream. Dry Creek, with Lake Sonoma on it,
+# joins the Russian River below the Healdsburg gauge (USGS drainage areas in square miles: Healdsburg 793,
+# Dry Creek near mouth 217, Hacienda Bridge 1,338).
+DOWNSTREAM = {"LAMC1": "HOPC1", "HOPC1": "HEAC1", "HEAC1": "GUEC1", "WSDC1": "GUEC1"}
+
+# The USGS site that measures what a point sends downstream: a gauge's own site, and Dry Creek near its mouth
+# for Lake Sonoma. Lake Mendocino has none here: no gauge below its dam was checked.
+OUTFLOW = {**{lid: row[0] for lid, row in GAUGES.items()}, "WSDC1": "11465350"}
+
+
+def upstream(lid: str) -> list[str]:
+    """The points that drain straight to this one."""
+    return [p for p, d in DOWNSTREAM.items() if d == lid]
+
+
+# (latitude, longitude) of the rainfall sample points of each gauge's whole basin: the 0.25 degree lattice
+# points inside the outline NLDI returns for the gauge's USGS site. Written by scripts/basin_points.py on
+# 2026-11-17. A basin holds the points of the basins upstream of it.
+RAIN_POINTS = {
+    "HOPC1": [  # 2 points, basin of USGS 11462500
+        (39.25, -123.25), (39.25, -123.0),
+    ],
+    "HEAC1": [  # 6 points, basin of USGS 11464000
+        (39.25, -123.25), (39.25, -123.0), (39.0, -123.25), (39.0, -123.0), (38.75, -123.0),
+        (38.75, -122.75),
+    ],
+    "GUEC1": [  # 7 points, basin of USGS 11467000
+        (39.25, -123.25), (39.25, -123.0), (39.0, -123.25), (39.0, -123.0), (38.75, -123.0),
+        (38.75, -122.75), (38.5, -122.75),
+    ],
+}
