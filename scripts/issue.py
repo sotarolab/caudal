@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import sys
 from datetime import UTC, date, datetime
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -68,7 +69,7 @@ def main(argv=None) -> int:
             failed += 1
             print(f"FAILED {lid}: {e}", file=sys.stderr)
             continue
-        path = pd.io.common.Path(a.out) / "forecasts" / a.model / lid / f"{today:%Y-%m-%d}.csv"
+        path = Path(a.out) /"forecasts" / a.model / lid / f"{today:%Y-%m-%d}.csv"
         path.parent.mkdir(parents=True, exist_ok=True)
         out.to_csv(path)
         print(f"{lid} {today}: q50 lead1 {out.q50.iloc[0]:,.0f} cfs, lead14 {out.q50.iloc[-1]:,.0f} cfs -> {path}")

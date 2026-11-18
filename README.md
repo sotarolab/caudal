@@ -24,7 +24,11 @@ Environment: conda env `caudal` (`conda create -n caudal python=3.11`, then `pip
     python scripts/train.py --smoke      # 2 points, 1 epoch
     python scripts/train.py              # seed 0, 30 epochs; writes data/models/ and data/results/
     python -m pytest tests
+    python scripts/issue.py              # today's quantile forecasts, leads 1-14, into ../hapi/data (or HAPI_DATA)
     jupyter lab notebooks/walkthrough.ipynb   # the whole thing, end to end: data, frames, model, skill, calibration, the ledger, the paper
 
-Not yet here: the daily issue script that writes quantile forecasts into hapi, conformal calibration,
-AR-day scoring, basin-mean forcing.
+In production: `.github/workflows/issue.yml` runs `scripts/issue.py` every day at 14:20 UTC against hapi's
+`data` branch, which holds the checkpoint (`data/models/`), the ERA5 forcing archive (`data/forcing/`) and the
+observed inflow; the forecasts are committed back next to the extended forcing.
+
+Not yet here: conformal calibration, AR-day scoring, basin-mean forcing.
