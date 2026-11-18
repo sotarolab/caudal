@@ -38,16 +38,23 @@ def parse(answer: dict) -> pd.DataFrame:
     return df[COLS].astype(float).dropna(how="all")
 
 
-def get(url: str) -> dict:
-    for attempt in range(8):
+def get(url: str, attempts: int = 8, timeout: float = 300, wait: float = 30) -> dict:
+    """The service's answer. The defaults are for building an archive: a burst is refused until the minute or
+    the hour turns, so the waits double from `wait` seconds and add up to 45 minutes. An issue uses `quick`."""
+    for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(url, timeout=300) as r:
+            with urllib.request.urlopen(url, timeout=timeout) as r:
                 return json.load(r)
-        except Exception:  # a burst is refused until the minute or the hour turns; wait and ask again
-            if attempt == 7:
+        except Exception:
+            if attempt == attempts - 1:
                 raise
-            time.sleep(min(900, 30 * 2**attempt))
+            time.sleep(min(900, wait * 2**attempt))
     raise AssertionError("unreachable")
+
+
+def quick(url: str) -> dict:
+    """`get` for an issue, which has minutes, not an hour: three tries of 60 seconds, 5 and 10 seconds apart."""
+    return get(url, attempts=3, timeout=60, wait=5)
 
 
 def path(lat: float, lon: float):
@@ -75,8 +82,9 @@ def update_archive(lat: float, lon: float, today: date | None = None, get=get) -
     return out
 
 
-def forecast(lat: float, lon: float, past_days: int = 3, days: int = 8, get=get) -> pd.DataFrame:
-    """The last analysis days and the next `days` days from the forecast model."""
+def forecast(lat: float, lon: float, past_days: int = 3, days: int = 8, get=quick) -> pd.DataFrame:
+    """The last analysis days and the next `days` days from the forecast model. Read at an issue, so it gives
+    up quickly."""
     return parse(get(FORECAST.format(lat=lat, lon=lon, past=past_days, days=days, hourly=",".join(VARS))))
 
 

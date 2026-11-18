@@ -3,7 +3,7 @@
 For each gauge: the last 45 days and the next 7 of hourly weather at its basin's rainfall points from the
 forecast model, the last 12 days of observed flow at the gauge and upstream from USGS, the regional quantile
 LSTM, and <out>/forecasts/<model>/<gauge>/<issue hour>Z.csv with one row per hour and the quantiles in cfs.
-Only the checkpoint is read from disk.
+Only the checkpoint is read from disk. A feed that does not answer in a minute is given up on and named.
 
     python scripts/issue_hourly.py                                   # into ../hapi/data (or HAPI_DATA)
     python scripts/issue_hourly.py --points GUEC1 --out /tmp/x
@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import sys
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 
 import pandas as pd
@@ -27,6 +28,15 @@ from caudal.sources import openmeteo, usgs
 
 PAST_DAYS = 45  # the 30-day rainfall total, the window, and a margin
 FLOW_DAYS = 12  # the window is 10 days
+recent_flow = partial(usgs.fetch, timeout=60, wait=5)  # an issue has minutes: three tries of 60 seconds
+
+
+def feed(name: str, call):
+    """The call's answer; a failure is raised again naming the feed, so the job's log says what was down."""
+    try:
+        return call()
+    except Exception as e:
+        raise RuntimeError(f"{name}: {e}") from e
 
 
 def main(argv=None) -> int:
@@ -46,10 +56,11 @@ def main(argv=None) -> int:
         try:
             for pt in RAIN_POINTS[lid]:
                 if pt not in weather:
-                    weather[pt] = openmeteo.forecast(*pt, past_days=PAST_DAYS, days=7)
+                    weather[pt] = feed(f"Open-Meteo weather at {pt}", lambda: openmeteo.forecast(*pt, past_days=PAST_DAYS, days=7))
             for site in H.sites(lid):
                 if site not in flows:
-                    flows[site] = usgs.complete_hours(site, (hour - timedelta(days=FLOW_DAYS)).date(), hour.date())
+                    first = (hour - timedelta(days=FLOW_DAYS)).date()
+                    flows[site] = feed(f"USGS flow at {site}", lambda: usgs.complete_hours(site, first, hour.date(), recent_flow))
             out = H.issue_point(model, ckpt, lid, hour, openmeteo.basin_mean([weather[pt] for pt in RAIN_POINTS[lid]]),
                                 [flows[s] for s in H.sites(lid)])
         except Exception as e:  # one gauge's feed must not lose the others' forecasts
