@@ -26,6 +26,7 @@ def test_parse_reads_a_flagged_value_as_missing():
     q = usgs.parse(rdb(("2019-01-01 00:00", "PST", "Ice"), ("2019-01-01 00:15", "PST", "90.5")))
     assert list(q) == [90.5]
     assert usgs.parse("# no data for this site\n").empty
+    assert usgs.parse("agency_cd\tsite_no\tdatetime\n5s\t15s\t20d\n\t\t\n").empty  # what a span with no values gets
 
 
 def test_hourly_is_the_mean_of_the_hour_ending_at_the_stamp():
@@ -66,9 +67,8 @@ def test_update_archive_extends_and_keeps_what_it_has(tmp_path, monkeypatch):
     second = usgs.update_archive("x", date(2019, 1, 5), fetch)
     assert asked[1] == (date(2018, 12, 31), date(2019, 1, 5))  # the last two days are read again, from a day before
     assert second.index[-1] == pd.Timestamp("2019-01-05 23:00") and first.index.isin(second.index).all()
-    with pytest.raises(OSError, match="no flow at all"):  # an empty answer for a whole span stops the update
-        usgs.update_archive("x", date(2019, 1, 5), lambda *a: quarter_hours("2030-01-01", "2030-01-01")[:0])
-    assert usgs.load("x").equals(second)  # and loses nothing
+    third = usgs.update_archive("x", date(2019, 1, 5), lambda *a: quarter_hours("2030-01-01", "2030-01-01")[:0])
+    assert third.equals(second) and usgs.load("x").equals(second)  # an empty answer is a gap: nothing is lost
 
 
 def test_days_the_service_refuses_are_left_out_and_the_rest_is_read():
@@ -82,3 +82,9 @@ def test_days_the_service_refuses_are_left_out_and_the_rest_is_read():
     q = usgs.fetch_around_bad_days("x", date(2019, 1, 1), date(2019, 1, 8), fetch)
     days = sorted(set(q.index.date))
     assert days == [date(2019, 1, d) for d in (1, 2, 4, 5, 6, 7, 8)]
+
+    def down(site, start, end):
+        raise OSError("503")
+
+    with pytest.raises(OSError, match="refused every day"):  # nothing read at all: the service is down
+        usgs.fetch_around_bad_days("x", date(2019, 1, 1), date(2019, 1, 4), down)
