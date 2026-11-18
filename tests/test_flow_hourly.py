@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+import torch
 
 from caudal import flow_hourly as H
 from caudal.models.quantile_lstm import QuantileLSTM
@@ -54,3 +55,21 @@ def test_issue_writes_leads_one_to_120_from_the_issue_hour():
     assert (out.q05 <= out.q50).all() and (out.q50 <= out.q95).all() and (out[["q05", "q50", "q95"]] >= 0).all().all()
     with pytest.raises(RuntimeError, match="forecast hours"):
         H.issue_point(model, ckpt, "HEAC1", hour, weather().loc[: hour + pd.Timedelta(hours=50)], flows)
+
+
+class LearnedNothing(torch.nn.Module):
+    """A model that predicts no change at any quantile."""
+
+    quantiles = (0.05, 0.5, 0.95)
+
+    def forward(self, x):
+        return torch.zeros(len(x), 3)
+
+
+def test_a_model_that_predicts_no_change_issues_the_last_observed_flow():
+    hour = HOURS[24 * 44]
+    ckpt = {"features": H.FEATURES, "lookback": H.LOOKBACK, "quantiles": [0.05, 0.5, 0.95], "qmean": {"HOPC1": 500.0},
+            "f_mean": [0.0] * len(H.SCALED), "f_std": [1.0] * len(H.SCALED), "s_target": {"HOPC1": 300.0}}
+    own = flow(until=24 * 44 - 2)  # the gauge's newest hour is three hours before the issue hour
+    out = H.issue_point(LearnedNothing(), ckpt, "HOPC1", hour, weather(), [own])
+    assert np.allclose(out[["q05", "q50", "q95"]].to_numpy(), own.iloc[-1], atol=0.1)  # every lead, every quantile

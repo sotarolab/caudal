@@ -9,7 +9,7 @@ from caudal.training.callbacks import (
     ProgressLogger,
     dispatch,
 )
-from caudal.training.masking import MaskRecent
+from caudal.training.masking import Anchor, MaskRecent
 
 __all__ = ["RUNS_DIR", "RunArtifacts", "environment_fingerprint", "list_runs", "BaseCallback", "CheckpointSaver",
-           "EarlyStopping", "MetricsLogger", "ProgressLogger", "dispatch", "MaskRecent"]
+           "EarlyStopping", "MetricsLogger", "ProgressLogger", "dispatch", "MaskRecent", "Anchor"]

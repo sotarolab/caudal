@@ -7,7 +7,7 @@ from torch.utils.data import TensorDataset
 
 from caudal import frames
 from caudal.models.quantile_lstm import QuantileLSTM, predict_quantiles
-from caudal.training import MaskRecent
+from caudal.training import Anchor, MaskRecent
 
 FEATURES = ["rain", *frames.OBS]  # toy windows: one weather column, then the observed inflow and its missing flag
 VALUE, FLAG = 1, 2
@@ -70,3 +70,15 @@ def test_mask_hides_every_flow_pair_it_is_given():
     got, _ = MaskRecent(ds, features, days=2, pairs=[("obs_flow", "obs_missing"), ("up1_flow", "up1_missing")])[0]
     assert got[-2:, [1, 3]].sum() == 0 and got[-2:, [2, 4]].tolist() == [[1.0, 1.0], [1.0, 1.0]]
     assert got[:-2, [1, 3]].min() == 1 and got[:, 0].min() == 1  # older flow and the weather are untouched
+
+
+def test_anchor_makes_the_target_its_change_from_the_newest_flow_shown():
+    ds = windows()  # the newest inflow of window 1 is its last row's VALUE
+    newest = ds.tensors[0][1, -1, VALUE]
+    x, y = Anchor(ds, FEATURES)[1]
+    assert y == 20.0 - newest and torch.equal(x, ds.tensors[0][1])
+    hidden = MaskRecent(ds, FEATURES, days=2)
+    _, y = Anchor(hidden, FEATURES)[1]
+    assert y == 20.0 - ds.tensors[0][1, -3, VALUE]  # two rows hidden: the anchor is the third from the end
+    _, y = Anchor(MaskRecent(ds, FEATURES, days=6), FEATURES)[1]
+    assert y == 20.0  # nothing shown: the target is left as it is

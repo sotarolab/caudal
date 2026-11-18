@@ -40,6 +40,8 @@ def parse(text: str) -> pd.Series:
     if len(lines) < 3:  # the header, the column widths and nothing else
         return pd.Series(dtype=float, name="cfs", index=pd.DatetimeIndex([], name="time"))
     df = pd.read_csv(io.StringIO("\n".join(lines)), sep="\t", skiprows=[1], dtype=str)
+    if "tz_cd" not in df:  # a span with no values is answered with three columns and no rows
+        return pd.Series(dtype=float, name="cfs", index=pd.DatetimeIndex([], name="time"))
     offset = df["tz_cd"].map(UTC_OFFSET)
     if offset.isna().any():
         raise ValueError(f"unknown time zone code {sorted(set(df.tz_cd[offset.isna()]))}")
@@ -70,9 +72,10 @@ def fetch(site: str, start: date, end: date) -> pd.Series:
     raise AssertionError("unreachable")
 
 
-def fetch_around_bad_days(site: str, start: date, end: date, fetch=fetch) -> pd.Series:
+def fetch_around_bad_days(site: str, start: date, end: date, fetch=fetch, whole: bool = True) -> pd.Series:
     """`fetch`, but a span the service refuses is halved until the days it cannot serve are found and left
-    out. On 2026-11-17 any request holding some days of March and April 1990 at Hopland was answered 503."""
+    out. On 2026-11-17 any request holding some days of March and April 1990 at Hopland was answered 503.
+    A span refused day after day with nothing read is the service being down, and raises."""
     try:
         return fetch(site, start, end)
     except (OSError, http.client.HTTPException) as e:
@@ -80,17 +83,18 @@ def fetch_around_bad_days(site: str, start: date, end: date, fetch=fetch) -> pd.
             print(f"left out {site} {start}: {e}", file=sys.stderr)
             return pd.Series(dtype=float, name="cfs", index=pd.DatetimeIndex([], name="time"))
         mid = start + (end - start) // 2
-        halves = [fetch_around_bad_days(site, a, b, fetch) for a, b in ((start, mid), (mid + timedelta(days=1), end))]
-        return pd.concat(halves)
+        spans = ((start, mid), (mid + timedelta(days=1), end))
+        got = pd.concat([fetch_around_bad_days(site, a, b, fetch, whole=False) for a, b in spans])
+        if whole and got.empty:
+            raise OSError(f"the service refused every day from {start} to {end} for {site}") from e
+        return got
 
 
 def complete_hours(site: str, start: date, end: date, fetch=fetch) -> pd.Series:
     """Hourly flow from `start` to `end`, whole hours only: the read starts a day early so the first hour kept
     has all its values, and an hour still in progress is left for the next read."""
     q = fetch_around_bad_days(site, start - timedelta(days=1), end, fetch)
-    if q.empty:  # nothing in a whole span is the service being down, not a bad day: stop, so the span is read again
-        raise OSError(f"no flow at all for {site} from {start} to {end}")
-    h = hourly(q)
+    h = hourly(q)  # a gauge can have nothing for months: an empty answer is a gap, not an error
     return h.iloc[1:][h.index[1:] <= q.index[-1]] if len(h) else h
 
 
