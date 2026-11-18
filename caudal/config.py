@@ -10,6 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_ROOT = Path(os.environ.get("CAUDAL_DATA") or REPO_ROOT / "data")
 FORCING_DIR = DATA_ROOT / "forcing"
 FLOW_DIR = DATA_ROOT / "flow_hourly"  # observed hourly flow per USGS site (caudal.sources.usgs)
+WEATHER_DIR = DATA_ROOT / "weather_hourly"  # hourly weather per sample point (caudal.sources.openmeteo)
 RESULTS_DIR = DATA_ROOT / "results"
 MODELS_DIR = DATA_ROOT / "models"
 CW3E_DIR = DATA_ROOT / "cw3e"  # CW3E AR catalog cache (caudal.data.cw3e)

@@ -21,9 +21,10 @@ def get_device() -> torch.device:
 
 
 class SequenceDataset(Dataset):
-    """Sliding-window (lookback -> next-day-target) sequences from one or more basins' daily time series.
+    """Sliding-window (lookback -> next-step target) sequences from one or more basins' time series, daily or
+    hourly: the step is read from each frame's index.
 
-    (a) Each frame is split into contiguous daily runs and windows never cross a gap;
+    (a) Each frame is split into contiguous runs and windows never cross a gap;
     (b) the target may be NaN (those days yield no sample -- the target column is never read as
     an input, so a NaN target day still serves as history; a model that takes observed flow reads
     it from its own NaN-free feature columns, see `caudal.frames.OBS`); (c) windows are sliced lazily in
@@ -58,7 +59,8 @@ class SequenceDataset(Dataset):
         self._samples: list[tuple[int, int]] = []  # (run_id, end position within run)
         self.timestamps: list[pd.Timestamp] = []  # target day per sample, aligned with __getitem__
         for frame in frames:
-            gap = np.flatnonzero(frame.index.to_series().diff().dt.days.to_numpy()[1:] != 1) + 1
+            spacing = frame.index.to_series().diff().iloc[1:]  # the frame's own step is its most common spacing
+            gap = np.flatnonzero((spacing != spacing.median()).to_numpy()) + 1
             for run in np.split(np.arange(len(frame)), gap):
                 if len(run) <= lookback:
                     continue
