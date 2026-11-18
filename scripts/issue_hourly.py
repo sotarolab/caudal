@@ -65,7 +65,7 @@ def main(argv=None) -> int:
                                 [flows[s] for s in H.sites(lid)])
         except Exception as e:  # one gauge's feed must not lose the others' forecasts
             failed += 1
-            print(f"FAILED {lid}: {e}", file=sys.stderr)
+            print(f"FAILED {lid}: {e}", file=sys.stderr, flush=True)
             continue
         path = Path(a.out) / "forecasts" / a.model / lid / f"{hour:%Y-%m-%dT%H}Z.csv"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -73,7 +73,7 @@ def main(argv=None) -> int:
         newest = flows[H.sites(lid)[0]]
         print(f"{lid} {hour:%Y-%m-%d %H}Z: last observed {newest.iloc[-1]:,.0f} cfs at {newest.index[-1]:%H}Z, median "
               f"+1 h {out.q50.iloc[0]:,.0f}, +24 h {out.q50.iloc[23]:,.0f}, +120 h {out.q50.iloc[-1]:,.0f}, "
-              f"peak {out.q50.max():,.0f} at +{int(out.lead[out.q50.idxmax()])} h -> {path}")
+              f"peak {out.q50.max():,.0f} at +{int(out.lead[out.q50.idxmax()])} h -> {path}", flush=True)
     return 1 if failed else 0
 
 

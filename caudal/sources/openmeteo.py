@@ -53,8 +53,10 @@ def get(url: str, attempts: int = 8, timeout: float = 300, wait: float = 30) -> 
 
 
 def quick(url: str) -> dict:
-    """`get` for an issue, which has minutes, not an hour: three tries of 60 seconds, 5 and 10 seconds apart."""
-    return get(url, attempts=3, timeout=60, wait=5)
+    """`get` for an issue, which has minutes, not an hour: four tries of 60 seconds, 5, 10 and 20 seconds
+    apart. From GitHub's runners a request to Open-Meteo sometimes times out in the handshake and the next
+    one goes through."""
+    return get(url, attempts=4, timeout=60, wait=5)
 
 
 def path(lat: float, lon: float):

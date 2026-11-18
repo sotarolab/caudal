@@ -43,7 +43,7 @@ def test_basin_mean_is_over_the_hours_every_point_has():
     assert list(m.index) == list(pd.date_range("2019-01-01 02:00", periods=2, freq="h")) and m.precip.tolist() == [2.0, 2.0]
 
 
-def test_forecast_gives_up_after_three_quick_tries(monkeypatch):
+def test_forecast_gives_up_after_four_quick_tries(monkeypatch):
     asked, waits = [], []
 
     def urlopen(url, timeout):
@@ -58,4 +58,4 @@ def test_forecast_gives_up_after_three_quick_tries(monkeypatch):
         pass
     else:
         raise AssertionError("a feed that never answers gave a forecast")
-    assert asked == [60, 60, 60] and waits == [5, 10]  # three minutes at most, not the archive's 45
+    assert asked == [60, 60, 60, 60] and waits == [5, 10, 20]  # under five minutes, not the archive's 45
