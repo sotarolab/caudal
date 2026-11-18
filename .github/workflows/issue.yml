@@ -1,6 +1,6 @@
 name: Issue the daily forecasts
 
-# quantile_inflow_v1_s0 for its 11 points, every day at 14:20 UTC: the 06z forecast cycle has reached
+# quantile_inflow_v1_s0 and quantile_inflow_v2_s0 for their 11 points, every day at 14:20 UTC: the 06z forecast cycle has reached
 # Open-Meteo by then, and hapi's own archive run (every hour at :37) comes after. The checkpoint,
 # the ERA5 forcing archive and the observed inflow all live on hapi's data branch; the forecasts and
 # the extended forcing are committed back to it, so the inputs of every issued forecast are on record.
@@ -34,8 +34,14 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -e . --extra-index-url https://download.pytorch.org/whl/cpu
-      - run: python scripts/issue.py --out "$HAPI_DATA"
-      # A point that failed leaves the job red; the points that issued are still committed.
+      # A model or a point that failed leaves the job red; whatever issued is still committed.
+      - name: Issue each model
+        run: |
+          failed=0
+          for model in quantile_inflow_v1_s0 quantile_inflow_v2_s0; do
+            python scripts/issue.py --model "$model" --out "$HAPI_DATA" || failed=1
+          done
+          exit $failed
       - name: Commit the forecasts and the forcing
         if: ${{ !cancelled() }}
         working-directory: hapi-data
@@ -44,7 +50,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/forecasts data/forcing
           git diff --cached --quiet && exit 0
-          git commit -q -m "issue quantile_inflow_v1_s0 $(date -u +%Y-%m-%d)"
+          git commit -q -m "issue the quantile inflow models $(date -u +%Y-%m-%d)"
           # hapi's archive job pushes to this branch every hour; try again if it lands between the pull and the push
           for attempt in 1 2 3; do
             git pull -q --rebase origin data && git push -q origin HEAD:data && exit 0
