@@ -32,4 +32,9 @@ In production: `.github/workflows/issue.yml` runs `scripts/issue.py` every day a
 checkpoints (`data/models/`), the ERA5 forcing archive (`data/forcing/`) and the
 observed inflow; the forecasts are committed back next to the extended forcing.
 
+Hourly flood forecasts: `.github/workflows/issue_hourly.yml` runs `scripts/issue_hourly.py` every hour for
+Hopland, Healdsburg and Guerneville, leads 1 to 120 hours, for `quantile_flow_hourly_v1_s0` and for
+`quantile_flow_hourly_v2_s0`, the quantile average of three LSTMs that differ in inputs and loss (`BLEND` in
+the script). `scripts/compare_hourly.py` scores candidates, HEFS and persistence on the same hours.
+
 Not yet here: conformal calibration, AR-day scoring, basin-mean forcing.

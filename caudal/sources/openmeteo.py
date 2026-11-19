@@ -35,6 +35,7 @@ FORECAST = ("https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lo
 START = date(1987, 8, 1)  # two months before the first hourly flow, for the 30-day rainfall total
 CHUNK_DAYS = 5 * 365
 REFRESH_DAYS = 7  # the newest days of the archive are preliminary and are read again
+PAST_FORECAST_DAYS = 30  # the forecast's own past days at an issue; older days come from the archive
 
 
 def parse(answer: dict) -> pd.DataFrame:
@@ -98,6 +99,17 @@ def forecast(lat: float, lon: float, past_days: int = 3, days: int = 8, get=quic
     soil = pd.DataFrame(get(url)["hourly"]).assign(time=lambda d: pd.to_datetime(d["time"])).set_index("time")
     out[list(SOIL.values())] = soil.rename(columns=SOIL)[list(SOIL.values())].reindex(out.index)
     return out
+
+
+def recent(lat: float, lon: float, days_back: int, get=quick) -> pd.DataFrame:
+    """The weather of the last `days_back` days and the next 7 for an issue: the archive (the reanalysis the
+    models were trained on) up to the start of the forecast's own past days, then the forecast model."""
+    fc = forecast(lat, lon, past_days=PAST_FORECAST_DAYS, days=7, get=get)
+    end = (fc.index[0] - pd.Timedelta(hours=1)).date()
+    start = end - timedelta(days=days_back - PAST_FORECAST_DAYS)
+    old = parse(get(ARCHIVE.format(lat=lat, lon=lon, start=start, end=end, hourly=",".join(VARS))))
+    out = pd.concat([old[old.index < fc.index[0]], fc])
+    return out[~out.index.duplicated(keep="last")].sort_index()
 
 
 def basin_mean(frames: list[pd.DataFrame]) -> pd.DataFrame:

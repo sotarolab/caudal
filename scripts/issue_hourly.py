@@ -26,7 +26,7 @@ from caudal.models.quantile_lstm import QuantileLSTM
 from caudal.points import RAIN_POINTS
 from caudal.sources import openmeteo, usgs
 
-PAST_DAYS = 45  # the 30-day rainfall total, the window, and a margin
+PAST_DAYS = 105  # the 90-day rainfall total, the 10-day window, and a margin
 FLOW_DAYS = 12  # the window is 10 days
 recent_flow = partial(usgs.fetch, timeout=60, wait=5)  # an issue has minutes: three tries of 60 seconds
 
@@ -71,7 +71,7 @@ def main(argv=None) -> int:
         try:
             for pt in RAIN_POINTS[lid]:
                 if pt not in weather:
-                    weather[pt] = feed(f"Open-Meteo weather at {pt}", lambda: openmeteo.forecast(*pt, past_days=PAST_DAYS, days=7))
+                    weather[pt] = feed(f"Open-Meteo weather at {pt}", lambda: openmeteo.recent(*pt, PAST_DAYS))
             basin = openmeteo.basin_mean([weather[pt] for pt in RAIN_POINTS[lid]])
             outs = []
             for model, ckpt in members:

@@ -82,7 +82,7 @@ def test_issue_leaves_a_forecast_already_issued_alone(tmp_path, monkeypatch):
     ckpt = {"features": H.FEATURES, "hidden": 4, "quantiles": [0.05, 0.5, 0.95], "points": ["HOPC1"],
             "state_dict": QuantileLSTM(n_features=len(H.FEATURES), hidden_size=4, quantiles=[0.05, 0.5, 0.95]).state_dict()}
     monkeypatch.setattr(issue.torch, "load", lambda *a, **k: ckpt)
-    monkeypatch.setattr(openmeteo, "forecast", lambda *a, **k: pytest.fail("an issued hour was fetched again"))
+    monkeypatch.setattr(openmeteo, "recent", lambda *a, **k: pytest.fail("an issued hour was fetched again"))
     path = tmp_path / "forecasts" / "m" / "HOPC1" / "2026-11-18T06Z.csv"
     path.parent.mkdir(parents=True)
     path.write_text("time,lead,q05,q50,q95\n2026-11-18T07:00Z,1,1,2,3\n")
@@ -147,7 +147,7 @@ def test_a_blend_issues_the_quantile_average_of_its_members(tmp_path, monkeypatc
     members = {"a": (LearnedNothing(), ckpt), "b": (Rises(), ckpt)}
     monkeypatch.setitem(issue.BLEND, "blend", ["a", "b"])
     monkeypatch.setattr(issue, "load", lambda name: members[name])
-    monkeypatch.setattr(openmeteo, "forecast", lambda *a, **k: weather())
+    monkeypatch.setattr(openmeteo, "recent", lambda *a, **k: weather())
     own = flow(until=24 * 44 - 2)
     monkeypatch.setattr(usgs, "complete_hours", lambda *a, **k: own)
     assert issue.main(["--model", "blend", "--out", str(tmp_path), "--hour", f"{hour:%Y-%m-%dT%H}"]) == 0
