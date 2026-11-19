@@ -33,7 +33,7 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -e . --extra-index-url https://download.pytorch.org/whl/cpu
-      - run: python scripts/issue_hourly.py --out "$HAPI_DATA"
+      - run: python scripts/issue_hourly.py --model quantile_flow_hourly_v1_s0 --out "$HAPI_DATA"  # v1 until v2 is chosen
       # A gauge that failed leaves the job red; the gauges that issued are still committed.
       - name: Commit the forecasts
         if: ${{ !cancelled() }}

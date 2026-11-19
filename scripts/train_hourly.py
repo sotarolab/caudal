@@ -68,7 +68,7 @@ def main(argv=None) -> int:
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     torch.save({"state_dict": model.state_dict(), **config, "f_mean": frames["f_mean"].tolist(),
-                "f_std": frames["f_std"].tolist(), "s_target": frames["s_target"], "qmean": frames["qmean"]},
+                "f_std": frames["f_std"].tolist(), "scale": frames["scale"], "qmean": frames["qmean"]},
                MODELS_DIR / f"{run}.pt")
     table.to_csv(RESULTS_DIR / f"eval_{run}.csv")
     art.update_manifest(status="finished", seconds=round(time.time() - t0), eval_lead=24, **pooled.loc[24].to_dict())

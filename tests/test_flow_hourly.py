@@ -88,3 +88,23 @@ def test_issue_leaves_a_forecast_already_issued_alone(tmp_path, monkeypatch):
     path.write_text("time,lead,q05,q50,q95\n2026-11-18T07:00Z,1,1,2,3\n")
     assert issue.main(["--model", "m", "--out", str(tmp_path), "--hour", "2026-11-18T06"]) == 0
     assert path.read_text() == "time,lead,q05,q50,q95\n2026-11-18T07:00Z,1,1,2,3\n"
+
+
+def test_log_target_round_trips_and_stays_above_zero():
+    sc = {"log": True, "m": 5.0, "s": 1.5}
+    q = np.array([0.0, 3.0, 150.0, 90000.0])
+    assert np.allclose(H.to_cfs(H.to_z(q, sc), sc), q)
+    assert H.to_cfs(-50.0, sc) >= -1  # the lowest the log scale can give is -1 cfs, which the issue clips to 0
+    assert H.scale_of(300.0) == {"log": False, "m": 0.0, "s": 300.0}  # a v1 checkpoint's bare spread
+
+
+def test_with_the_log_target_no_change_is_the_last_flow_and_nothing_falls_below_zero():
+    hour = HOURS[24 * 44]
+    ckpt = {"features": H.FEATURES, "lookback": H.LOOKBACK, "quantiles": [0.05, 0.5, 0.95], "qmean": {"HOPC1": 500.0},
+            "f_mean": [0.0] * len(H.SCALED), "f_std": [1.0] * len(H.SCALED),
+            "scale": {"HOPC1": {"log": True, "m": 5.0, "s": 1.5}}}
+    own = flow(until=24 * 44 - 2)
+    out = H.issue_point(LearnedNothing(), ckpt, "HOPC1", hour, weather(), [own])
+    assert np.allclose(out[["q05", "q50", "q95"]].to_numpy(), own.iloc[-1], atol=0.1)
+    model = QuantileLSTM(n_features=len(H.FEATURES), hidden_size=4, quantiles=ckpt["quantiles"])
+    assert (H.issue_point(model, ckpt, "HOPC1", hour, weather(), [own])[["q05", "q50", "q95"]] >= 0).all().all()
