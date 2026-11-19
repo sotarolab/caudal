@@ -7,15 +7,17 @@ from caudal.sources import openmeteo
 
 def answer(start: str, hours: int, rain: float = 1.0) -> dict:
     t = pd.date_range(start, periods=hours, freq="h")
+    others = {k: [0.3] * hours for k in openmeteo.VARS if k not in ("precipitation", "temperature_2m")}
     return {"hourly": {"time": [x.strftime("%Y-%m-%dT%H:%M") for x in t], "precipitation": [rain] * hours,
-                       "temperature_2m": [10.0] * hours}}
+                       "temperature_2m": [10.0] * hours, **others}}
 
 
 def test_parse_reads_one_point_as_an_hourly_frame():
     a = answer("2019-02-26T00:00", 3)
-    a["hourly"]["precipitation"][2] = a["hourly"]["temperature_2m"][2] = None  # an hour the service has not filled
+    for k in openmeteo.VARS:  # an hour the service has not filled
+        a["hourly"][k][2] = None
     w = openmeteo.parse(a)
-    assert list(w.columns) == ["precip", "temp"] and list(w.index) == list(pd.date_range("2019-02-26", periods=2, freq="h"))
+    assert list(w.columns) == openmeteo.COLS and list(w.index) == list(pd.date_range("2019-02-26", periods=2, freq="h"))
     assert w.precip.tolist() == [1.0, 1.0] and w.temp.tolist() == [10.0, 10.0]
 
 

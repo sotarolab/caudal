@@ -50,6 +50,7 @@ def main(argv=None) -> int:
     ckpt = torch.load(MODELS_DIR / f"{a.model}.pt", map_location="cpu", weights_only=False)
     model = QuantileLSTM(n_features=len(ckpt["features"]), hidden_size=ckpt["hidden"], quantiles=ckpt["quantiles"])
     model.load_state_dict(ckpt["state_dict"])
+    H.configure(ckpt.get("config", H.V1))  # what this model reads; a checkpoint without a configuration is v1
     points = [x for x in a.points.split(",") if x] or ckpt["points"]
     weather, flows, failed = {}, {}, 0
     for lid in points:

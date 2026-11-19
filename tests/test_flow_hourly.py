@@ -108,3 +108,20 @@ def test_with_the_log_target_no_change_is_the_last_flow_and_nothing_falls_below_
     assert np.allclose(out[["q05", "q50", "q95"]].to_numpy(), own.iloc[-1], atol=0.1)
     model = QuantileLSTM(n_features=len(H.FEATURES), hidden_size=4, quantiles=ckpt["quantiles"])
     assert (H.issue_point(model, ckpt, "HOPC1", hour, weather(), [own])[["q05", "q50", "q95"]] >= 0).all().all()
+
+
+def test_frame_carries_soil_moisture_and_the_release_gauges():
+    try:
+        H.configure(H.FULL)
+        assert H.sites("HOPC1") == ["11462500", "11462080"]  # Talmage, below Coyote Valley Dam
+        assert H.sites("GUEC1") == ["11467000", "11464000", "11465350", "11465240"]  # and below Warm Springs Dam
+        hours = pd.date_range("2019-01-01", periods=24 * 100, freq="h", name="time")  # longer than the 90-day total
+        w = pd.DataFrame({"precip": 1.0, "temp": 10.0, "et0": 0.1, "soil_0_7": 0.3, "soil_7_28": 0.3, "soil_28_100": 0.3}, index=hours)
+        flows = [pd.Series(100.0 + k, index=hours) for k in range(4)]
+        fr = H.build_frame("GUEC1", w, flows, qmean=500.0)
+        assert {"soil_0_7", "et0", "precip_90d", "up3"} <= set(fr.columns) and (fr["up3"] == 103.0).all()
+        assert fr["precip_90d"].iloc[-1] == 2160.0
+        z = H.prep(fr, np.zeros(len(H.SCALED)), np.ones(len(H.SCALED)), {"log": True, "m": 5.0, "s": 1.5, "w": 200.0})
+        assert np.allclose(z["weight"], fr["flow"] / 200.0)  # each hour counts by its flow
+    finally:
+        H.configure(H.V2)

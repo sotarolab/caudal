@@ -38,19 +38,50 @@ EVAL_LEADS = (1, 6, 12, 24, 48, 72, 120)
 HIGH = 0.99  # the hours above this quantile of a gauge's fit-window flow are its high-flow hours
 LOW = 0.25  # and the hours below this one its low-flow hours
 
-WET = {"precip_24h": 24, "precip_72h": 72, "precip_7d": 168, "precip_30d": 720}  # running rainfall totals, hours
-DYNAMIC = [*openmeteo.COLS, *WET, "doy_sin", "doy_cos"]
-STATIC = ["static_log_qmean"]
-SCALED = DYNAMIC + STATIC
 TARGET = "flow"
-RAW = [TARGET, "up1", "up2"]  # cfs: the gauge and up to two points upstream
-PAIRS = [("obs_flow", "obs_missing"), ("up1_flow", "up1_missing"), ("up2_flow", "up2_missing")]
-FEATURES = SCALED + [c for pair in PAIRS for c in pair]
+STATIC = ["static_log_qmean"]
+# The releases of the dams upstream, measured below them: Coyote Valley Dam (Lake Mendocino) at Talmage, above
+# Hopland; Warm Springs Dam (Lake Sonoma) below Lambert Bridge, above Dry Creek's mouth.
+RELEASES = {"HOPC1": ["11462080"], "GUEC1": ["11465240"]}
+
+# What a model reads, as a configuration saved with its checkpoint. V1 is the first issued model; `configure`
+# sets the module's column lists from one, and a checkpoint without a configuration is v1.
+V1 = {"log": False, "weighted": False, "weather": ["precip", "temp"],
+      "wet": {"precip_24h": 24, "precip_72h": 72, "precip_7d": 168, "precip_30d": 720}, "releases": False}
+V2 = {**V1, "log": True}
+# The candidates of caudal #27: the forecast in log space with the loss weighted by flow, then the inputs a
+# basin's wetness and its dams add.
+WEIGHTED_LOG = {**V1, "log": True, "weighted": True}
+FULL = {**WEIGHTED_LOG, "weather": ["precip", "temp", "et0", "soil_0_7", "soil_7_28", "soil_28_100"],
+        "wet": {**V1["wet"], "precip_90d": 2160}, "releases": True}
+CONFIGS = {"v1": V1, "v2": V2, "weighted_log": WEIGHTED_LOG, "full": FULL}
+
+
+def set_years(fit_end: str, eval_start: str, eval_end: str) -> None:
+    global FIT_END, EVAL_START, EVAL_END
+    FIT_END, EVAL_START, EVAL_END = fit_end, eval_start, eval_end
+
+
+def configure(cfg: dict) -> None:
+    global LOG, WEIGHTED, WEATHER, WET, USE_RELEASES, DYNAMIC, SCALED, RAW, PAIRS, FEATURES
+    LOG, WEIGHTED, WEATHER, WET, USE_RELEASES = cfg["log"], cfg["weighted"], cfg["weather"], cfg["wet"], cfg["releases"]
+    DYNAMIC = [*WEATHER, *WET, "doy_sin", "doy_cos"]
+    SCALED = DYNAMIC + STATIC
+    n = max(len(sites(lid)) for lid in GAUGES)
+    RAW = [TARGET, *[f"up{k}" for k in range(1, n)]]  # cfs: the gauge and the points upstream
+    PAIRS = [("obs_flow", "obs_missing"), *[(f"up{k}_flow", f"up{k}_missing") for k in range(1, n)]]
+    FEATURES = SCALED + [c for pair in PAIRS for c in pair]
 
 
 def sites(lid: str) -> list[str]:
-    """The USGS sites a gauge's frame reads: its own, then those of the points upstream that have one."""
-    return [GAUGES[lid][0], *[OUTFLOW[p] for p in sorted(upstream(lid)) if p in OUTFLOW]]
+    """The USGS sites a gauge's frame reads: its own, those of the points upstream that have one, and the dam
+    releases above it when the configuration reads them."""
+    ups = [OUTFLOW[p] for p in sorted(upstream(lid)) if p in OUTFLOW]
+    return [GAUGES[lid][0], *ups, *(RELEASES.get(lid, []) if USE_RELEASES else [])]
+
+
+USE_RELEASES = False
+configure(V2)
 
 
 def build_frame(lid: str, weather: pd.DataFrame, flows: list[pd.Series], qmean: float | None = None) -> pd.DataFrame:
@@ -58,7 +89,7 @@ def build_frame(lid: str, weather: pd.DataFrame, flows: list[pd.Series], qmean: 
     The row of an hour holds the weather of the next hour beside the flow of this one, so the window that ends
     just before a target hour has the weather up to that hour and the flow up to the hour before. `qmean` is
     the gauge's mean flow over the fit window; left out, it is computed here."""
-    out = weather[openmeteo.COLS].copy()
+    out = weather[WEATHER].copy()
     for name, hours in WET.items():
         out[name] = out["precip"].rolling(hours).sum()
     angle = 2 * np.pi * out.index.day_of_year.to_numpy() / 365.25
@@ -96,6 +127,8 @@ def prep(frame: pd.DataFrame, f_mean, f_std, scale) -> pd.DataFrame:
         scaled = to_z(frame[raw], sc)
         out[value], out[flag] = scaled.fillna(0.0), scaled.isna().astype(float)
     out[TARGET] = to_z(frame[TARGET], sc)
+    if WEIGHTED:  # each hour counts in the loss by its flow, so a log-scale error on a flood counts as in cfs
+        out["weight"] = (frame[TARGET] / sc.get("w", 1.0)).fillna(0.0)
     return out
 
 
@@ -114,7 +147,8 @@ def build_regional(lids: list[str], frames: dict[str, pd.DataFrame] | None = Non
     f_std = pool[SCALED].std().to_numpy(dtype=np.float32)
     f_std = np.where(f_std > 0, f_std, 1.0).astype(np.float32)
     x = {lid: np.log1p(fr[TARGET].clip(lower=0)) if LOG else fr[TARGET] for lid, fr in fit.items()}
-    scale = {lid: {"log": LOG, "m": float(x[lid].mean()) if LOG else 0.0, "s": float(x[lid].std())} for lid in fit}
+    scale = {lid: {"log": LOG, "m": float(x[lid].mean()) if LOG else 0.0, "s": float(x[lid].std()),
+                   "w": float(fit[lid][TARGET].mean())} for lid in fit}
     qmean = {lid: float(fr[TARGET].mean()) for lid, fr in fit.items()}
     train = {lid: prep(fr, f_mean, f_std, scale[lid]) for lid, fr in fit.items()}
     return {"train": train, "raw": raw, "scale": scale, "qmean": qmean, "f_mean": f_mean, "f_std": f_std}
@@ -127,6 +161,21 @@ def windows(lead: int | None = None):
     def wrap(ds):
         return Anchor(MaskRecent(ds, FEATURES, lead, pairs=PAIRS) if lead else ds, FEATURES, PAIRS[0])
     return wrap
+
+
+def predictions(model, frames: dict, lid: str, lead: int) -> pd.DataFrame:
+    """The model's quantiles in cfs for every evaluation hour of one gauge at one lead, with the observation and
+    the newest flow the forecast saw (index: target hour)."""
+    raw, sc = frames["raw"][lid], scale_of(frames["scale"][lid])
+    history = raw.loc[:EVAL_START].iloc[-(LOOKBACK + 1) : -1]
+    ev = prep(pd.concat([history, raw.loc[EVAL_START:EVAL_END]]), frames["f_mean"], frames["f_std"], sc)
+    change, moved, idx = predict_quantiles(model, ev, FEATURES, TARGET, LOOKBACK, batch_size=4096, wrap=windows(lead))
+    z = ev[TARGET].reindex(idx).to_numpy()
+    preds = np.clip(to_cfs(change + (z - moved)[:, None], sc), 0, None)
+    out = pd.DataFrame(preds, index=idx, columns=[f"q{int(round(q * 100)):02d}" for q in model.quantiles])
+    out["obs"] = raw[TARGET].reindex(idx).to_numpy()
+    out["last"] = raw[TARGET].reindex(idx - pd.Timedelta(hours=lead + 1)).to_numpy()
+    return out
 
 
 def evaluate(model, frames: dict, lid: str, lead: int) -> dict:

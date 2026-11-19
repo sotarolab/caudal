@@ -82,3 +82,11 @@ def test_anchor_makes_the_target_its_change_from_the_newest_flow_shown():
     assert y == 20.0 - ds.tensors[0][1, -3, VALUE]  # two rows hidden: the anchor is the third from the end
     _, y = Anchor(MaskRecent(ds, FEATURES, days=6), FEATURES)[1]
     assert y == 20.0  # nothing shown: the target is left as it is
+
+
+def test_weights_pass_through_the_wrappers():
+    x = torch.ones(1, 6, 3)
+    x[:, :, FLAG] = 0.0
+    ds = TensorDataset(x, torch.tensor([10.0]), torch.tensor([2.5]))  # a window, its target and its weight
+    _, y, w = Anchor(MaskRecent(ds, FEATURES, days=2), FEATURES)[0]
+    assert w == 2.5 and y == 10.0 - 1.0  # the weight is untouched; the target is still its change

@@ -34,20 +34,27 @@ def main(argv=None) -> int:
     p.add_argument("--epochs", type=int, default=20)
     p.add_argument("--samples", type=int, default=250_000, help="windows drawn per epoch")
     p.add_argument("--smoke", action="store_true")
+    p.add_argument("--config", default="weighted_log", choices=list(H.CONFIGS), help="what the model reads")
+    p.add_argument("--name", default=None, help="run name; default: the product name")
+    p.add_argument("--fit-end", default=H.FIT_END)
+    p.add_argument("--eval", nargs=2, default=[H.EVAL_START, H.EVAL_END], metavar=("START", "END"))
     a = p.parse_args(argv)
+    H.configure(H.CONFIGS[a.config])
+    H.set_years(a.fit_end, *a.eval)
     leads = H.EVAL_LEADS
     if a.smoke:
         a.epochs, a.samples, leads = 1, 20_000, (1, 24)
-    run = f"{H.PRODUCT}_s{a.seed}" + ("_smoke" if a.smoke else "")
+    run = (a.name or f"{H.PRODUCT}_s{a.seed}") + ("_smoke" if a.smoke else "")
 
     frames = H.build_regional(list(GAUGES))
     torch.manual_seed(a.seed)
-    ds = MaskRecent(SequenceDataset(list(frames["train"].values()), H.FEATURES, H.TARGET, H.LOOKBACK),
+    weight = "weight" if H.WEIGHTED else None
+    ds = MaskRecent(SequenceDataset(list(frames["train"].values()), H.FEATURES, H.TARGET, H.LOOKBACK, weight),
                     H.FEATURES, H.MAX_HIDDEN, random=True, pairs=H.PAIRS)
     ds = Anchor(ds, H.FEATURES, H.PAIRS[0])  # the target is the change from the newest flow left in the window
     loader = DataLoader(ds, batch_size=H.BATCH_SIZE, sampler=RandomSampler(ds, replacement=True, num_samples=a.samples))
     model = QuantileLSTM(n_features=len(H.FEATURES), hidden_size=H.HIDDEN)
-    config = {"product": H.PRODUCT, "points": list(frames["train"]), "features": H.FEATURES, "pairs": H.PAIRS,
+    config = {"product": H.PRODUCT, "config": H.CONFIGS[a.config], "config_name": a.config, "points": list(frames["train"]), "features": H.FEATURES, "pairs": H.PAIRS,
               "max_hidden": H.MAX_HIDDEN, "leads": H.LEADS, "quantiles": list(DEFAULT_QUANTILES), "lookback": H.LOOKBACK,
               "hidden": H.HIDDEN, "batch_size": H.BATCH_SIZE, "epochs": a.epochs, "samples": a.samples, "lr": LR,
               "seed": a.seed, "fit_end": H.FIT_END, "eval": [H.EVAL_START, H.EVAL_END], "n_windows": len(ds)}
