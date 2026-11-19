@@ -33,12 +33,12 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -e . --extra-index-url https://download.pytorch.org/whl/cpu
-      # v1 and the v2 blend side by side, so the two are scored live on the same hours; a product that fails
-      # (a checkpoint not yet on the data branch) leaves the job red without stopping the other.
+      # v2 only: v1 fell to near zero in recessions (sotarolab/caudal#19) and stopped on 2026-11-19; its issued
+      # files stay in the record. A product that fails leaves the job red.
       - name: Issue each product
         run: |
           failed=0
-          for model in quantile_flow_hourly_v1_s0 quantile_flow_hourly_v2_s0; do
+          for model in quantile_flow_hourly_v2_s0; do
             python scripts/issue_hourly.py --model "$model" --out "$HAPI_DATA" || failed=1
           done
           exit $failed
