@@ -3,7 +3,8 @@
 Every product is read at five quantiles (5, 25, 50, 75 and 95%), its CRPS taken over them as an ensemble, on
 the hours every product has a value for. A lead L is a target L + 1 hours after the newest observed flow.
 
-    python scripts/compare_hourly.py --lstm cand_v1 cand_weighted_log cand_full --hefspp cand_hefspp
+    python scripts/compare_hourly.py --lstm cand_v1 cand_weighted_log cand_full --hefspp cand_hefspp \
+        --blend cand_v1+cand_weighted_log cand_v1+cand_full cand_v1+cand_weighted_log+cand_full
 """
 
 from __future__ import annotations
@@ -80,6 +81,7 @@ def main(argv=None) -> int:
     p.add_argument("--fit-end", default="2019-09-30 23:00")
     p.add_argument("--eval", nargs=2, default=["2019-10-01 00:00", "2025-09-30 23:00"])
     p.add_argument("--out", default="compare_hourly")
+    p.add_argument("--blend", nargs="*", default=[], help="products to average quantile by quantile, as a+b(+c)")
     a = p.parse_args(argv)
     H.set_years(a.fit_end, *a.eval)
     leads = H.EVAL_LEADS
@@ -90,6 +92,10 @@ def main(argv=None) -> int:
         obs, last = f["obs"], f["last"]
     if a.hefspp:
         products[a.hefspp], products["HEFS"] = hefspp_hours(a.hefspp, leads)
+    for spec in a.blend:  # quantile averaging (Lichtendahl, Grushka-Cockayne and Winkler 2013, Manage. Sci. 59)
+        parts = [products[n] for n in spec.split("+")]
+        idx = parts[0].index
+        products[f"blend:{spec}"] = sum(p.reindex(idx)[Q5] for p in parts) / len(parts)
     products["persistence"] = next(iter(products.values()))[[]].copy()
     common = None
     for f in products.values():

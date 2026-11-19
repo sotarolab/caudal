@@ -125,3 +125,32 @@ def test_frame_carries_soil_moisture_and_the_release_gauges():
         assert np.allclose(z["weight"], fr["flow"] / 200.0)  # each hour counts by its flow
     finally:
         H.configure(H.V2)
+
+
+class Rises(torch.nn.Module):
+    """A model that predicts one scaled unit more flow at every quantile."""
+
+    quantiles = (0.05, 0.5, 0.95)
+
+    def forward(self, x):
+        return torch.ones(len(x), 3)
+
+
+def test_a_blend_issues_the_quantile_average_of_its_members(tmp_path, monkeypatch):
+    import scripts.issue_hourly as issue
+    from caudal.sources import openmeteo, usgs
+
+    hour = HOURS[24 * 44]
+    ckpt = {"features": H.FEATURES, "lookback": H.LOOKBACK, "quantiles": [0.05, 0.5, 0.95], "qmean": {"HOPC1": 500.0},
+            "f_mean": [0.0] * len(H.SCALED), "f_std": [1.0] * len(H.SCALED), "s_target": {"HOPC1": 300.0},
+            "points": ["HOPC1"], "config": H.V1}  # v1's scale: one unit is 300 cfs
+    members = {"a": (LearnedNothing(), ckpt), "b": (Rises(), ckpt)}
+    monkeypatch.setitem(issue.BLEND, "blend", ["a", "b"])
+    monkeypatch.setattr(issue, "load", lambda name: members[name])
+    monkeypatch.setattr(openmeteo, "forecast", lambda *a, **k: weather())
+    own = flow(until=24 * 44 - 2)
+    monkeypatch.setattr(usgs, "complete_hours", lambda *a, **k: own)
+    assert issue.main(["--model", "blend", "--out", str(tmp_path), "--hour", f"{hour:%Y-%m-%dT%H}"]) == 0
+    out = pd.read_csv(tmp_path / "forecasts" / "blend" / "HOPC1" / f"{hour:%Y-%m-%dT%H}Z.csv")
+    assert np.allclose(out[["q05", "q50", "q95"]].to_numpy(), own.iloc[-1] + 150, atol=0.2)  # (0 + 300) / 2
+    H.configure(H.V2)

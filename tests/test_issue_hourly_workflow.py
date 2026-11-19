@@ -10,7 +10,9 @@ WORKFLOW = Path(__file__).parent.parent / ".github" / "workflows" / "issue_hourl
 def test_job_issues_every_hour_into_the_hapi_checkout():
     text = WORKFLOW.read_text()
     assert re.search(r"cron: '\d+ \* \* \* \*'", text), "every hour, so each observed hour has a forecast made the hour before"
-    assert re.search(r'python scripts/issue_hourly\.py --model quantile_flow_hourly_v\d+_s\d+ --out "\$HAPI_DATA"', text)
+    loop = re.search(r"for model in (.+); do", text)
+    assert loop and loop.group(1).split() == ["quantile_flow_hourly_v1_s0", "quantile_flow_hourly_v2_s0"]
+    assert 'python scripts/issue_hourly.py --model "$model" --out "$HAPI_DATA" || failed=1' in text
     env = dict(re.findall(r"^\s+(CAUDAL_DATA|HAPI_DATA): (.+)$", text, re.M))
     assert env["CAUDAL_DATA"] == env["HAPI_DATA"] and env["HAPI_DATA"].endswith("/hapi-data/data")
     assert set(re.findall(r"token: (.+)", text)) == {"${{ secrets.HAPI_TOKEN }}"}, "the push right comes only from the secret"
