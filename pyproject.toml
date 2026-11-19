@@ -11,6 +11,8 @@ dependencies = ["numpy>=2", "pandas>=2.2", "torch>=2.9"]
 
 [project.optional-dependencies]
 dev = ["pytest>=9", "ruff>=0.6"]
+# the notebooks; the package itself needs only numpy, pandas and torch
+notebook = ["lightning>=2.4", "tensorboard>=2.17", "matplotlib>=3.8", "ipykernel>=6"]
 
 [tool.setuptools.packages.find]
 include = ["caudal*"]
