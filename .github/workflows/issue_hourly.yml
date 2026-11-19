@@ -33,7 +33,15 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -e . --extra-index-url https://download.pytorch.org/whl/cpu
-      - run: python scripts/issue_hourly.py --out "$HAPI_DATA"
+      # v1 and the v2 blend side by side, so the two are scored live on the same hours; a product that fails
+      # (a checkpoint not yet on the data branch) leaves the job red without stopping the other.
+      - name: Issue each product
+        run: |
+          failed=0
+          for model in quantile_flow_hourly_v1_s0 quantile_flow_hourly_v2_s0; do
+            python scripts/issue_hourly.py --model "$model" --out "$HAPI_DATA" || failed=1
+          done
+          exit $failed
       # A gauge that failed leaves the job red; the gauges that issued are still committed.
       - name: Commit the forecasts
         if: ${{ !cancelled() }}
@@ -43,7 +51,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/forecasts
           git diff --cached --quiet && exit 0
-          git commit -q -m "issue quantile_flow_hourly_v1_s0 $(date -u +%Y-%m-%dT%HZ)"
+          git commit -q -m "issue the hourly flow products $(date -u +%Y-%m-%dT%HZ)"
           # hapi's archive job pushes to this branch every hour; try again if it lands between the pull and the push
           for attempt in 1 2 3; do
             git pull -q --rebase origin data && git push -q origin HEAD:data && exit 0

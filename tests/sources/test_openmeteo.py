@@ -7,15 +7,17 @@ from caudal.sources import openmeteo
 
 def answer(start: str, hours: int, rain: float = 1.0) -> dict:
     t = pd.date_range(start, periods=hours, freq="h")
+    others = {k: [0.3] * hours for k in openmeteo.VARS if k not in ("precipitation", "temperature_2m")}
     return {"hourly": {"time": [x.strftime("%Y-%m-%dT%H:%M") for x in t], "precipitation": [rain] * hours,
-                       "temperature_2m": [10.0] * hours}}
+                       "temperature_2m": [10.0] * hours, **others}}
 
 
 def test_parse_reads_one_point_as_an_hourly_frame():
     a = answer("2019-02-26T00:00", 3)
-    a["hourly"]["precipitation"][2] = a["hourly"]["temperature_2m"][2] = None  # an hour the service has not filled
+    for k in openmeteo.VARS:  # an hour the service has not filled
+        a["hourly"][k][2] = None
     w = openmeteo.parse(a)
-    assert list(w.columns) == ["precip", "temp"] and list(w.index) == list(pd.date_range("2019-02-26", periods=2, freq="h"))
+    assert list(w.columns) == openmeteo.COLS and list(w.index) == list(pd.date_range("2019-02-26", periods=2, freq="h"))
     assert w.precip.tolist() == [1.0, 1.0] and w.temp.tolist() == [10.0, 10.0]
 
 
@@ -59,3 +61,15 @@ def test_forecast_gives_up_after_four_quick_tries(monkeypatch):
     else:
         raise AssertionError("a feed that never answers gave a forecast")
     assert asked == [60, 60, 60, 60] and waits == [5, 10, 20]  # under five minutes, not the archive's 45
+
+
+def test_recent_takes_old_days_from_the_archive_and_the_rest_from_the_forecast():
+    def get(url):
+        if "archive-api" in url:
+            start = url.split("start_date=")[1][:10]
+            return answer(f"{start}T00:00", 24 * 80, rain=1.0)  # runs past the forecast's first hour: dropped
+        return answer("2026-10-20T00:00", 24 * 37, rain=2.0)  # 30 past days and 7 ahead
+    w = openmeteo.recent(39.25, -123.0, 105, get)
+    assert w.index.is_unique and w.index.is_monotonic_increasing
+    assert (w.loc[: "2026-10-19 23:00", "precip"] == 1.0).all() and (w.loc["2026-10-20":, "precip"] == 2.0).all()
+    assert w.index[0] <= pd.Timestamp("2026-10-19") - pd.Timedelta(days=74)

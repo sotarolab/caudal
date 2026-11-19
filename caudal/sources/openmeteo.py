@@ -20,8 +20,14 @@ import pandas as pd
 
 from caudal.config import WEATHER_DIR
 
-VARS = {"precipitation": "precip", "temperature_2m": "temp"}
+VARS = {
+    "precipitation": "precip", "temperature_2m": "temp", "et0_fao_evapotranspiration": "et0",
+    "soil_moisture_0_to_7cm": "soil_0_7", "soil_moisture_7_to_28cm": "soil_7_28", "soil_moisture_28_to_100cm": "soil_28_100",
+}
 COLS = list(VARS.values())
+# The forecast's default model gives other soil layers; ECMWF's IFS gives ERA5's, from the same land model.
+SOIL = {k: v for k, v in VARS.items() if k.startswith("soil_moisture")}
+SOIL_MODEL = "ecmwf_ifs025"
 ARCHIVE = ("https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lon}"
            "&start_date={start}&end_date={end}&hourly={hourly}&timezone=UTC")
 FORECAST = ("https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
@@ -29,6 +35,7 @@ FORECAST = ("https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lo
 START = date(1987, 8, 1)  # two months before the first hourly flow, for the 30-day rainfall total
 CHUNK_DAYS = 5 * 365
 REFRESH_DAYS = 7  # the newest days of the archive are preliminary and are read again
+PAST_FORECAST_DAYS = 30  # the forecast's own past days at an issue; older days come from the archive
 
 
 def parse(answer: dict) -> pd.DataFrame:
@@ -87,7 +94,22 @@ def update_archive(lat: float, lon: float, today: date | None = None, get=get) -
 def forecast(lat: float, lon: float, past_days: int = 3, days: int = 8, get=quick) -> pd.DataFrame:
     """The last analysis days and the next `days` days from the forecast model. Read at an issue, so it gives
     up quickly."""
-    return parse(get(FORECAST.format(lat=lat, lon=lon, past=past_days, days=days, hourly=",".join(VARS))))
+    out = parse(get(FORECAST.format(lat=lat, lon=lon, past=past_days, days=days, hourly=",".join(VARS))))
+    url = FORECAST.format(lat=lat, lon=lon, past=past_days, days=days, hourly=",".join(SOIL)) + f"&models={SOIL_MODEL}"
+    soil = pd.DataFrame(get(url)["hourly"]).assign(time=lambda d: pd.to_datetime(d["time"])).set_index("time")
+    out[list(SOIL.values())] = soil.rename(columns=SOIL)[list(SOIL.values())].reindex(out.index)
+    return out
+
+
+def recent(lat: float, lon: float, days_back: int, get=quick) -> pd.DataFrame:
+    """The weather of the last `days_back` days and the next 7 for an issue: the archive (the reanalysis the
+    models were trained on) up to the start of the forecast's own past days, then the forecast model."""
+    fc = forecast(lat, lon, past_days=PAST_FORECAST_DAYS, days=7, get=get)
+    end = (fc.index[0] - pd.Timedelta(hours=1)).date()
+    start = end - timedelta(days=days_back - PAST_FORECAST_DAYS)
+    old = parse(get(ARCHIVE.format(lat=lat, lon=lon, start=start, end=end, hourly=",".join(VARS))))
+    out = pd.concat([old[old.index < fc.index[0]], fc])
+    return out[~out.index.duplicated(keep="last")].sort_index()
 
 
 def basin_mean(frames: list[pd.DataFrame]) -> pd.DataFrame:

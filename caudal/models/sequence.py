@@ -32,7 +32,8 @@ class SequenceDataset(Dataset):
     """
 
     def __init__(
-        self, frames: list[pd.DataFrame], feature_cols: list[str], target_col: str, lookback: int
+        self, frames: list[pd.DataFrame], feature_cols: list[str], target_col: str, lookback: int,
+        weight_col: str | None = None,
     ):
         """
         Parameters
@@ -56,6 +57,7 @@ class SequenceDataset(Dataset):
         self.lookback = lookback
         self._features: list[np.ndarray] = []  # one (run_len, n_features) array per contiguous run
         self._targets: list[np.ndarray] = []
+        self._weights: list[np.ndarray] | None = [] if weight_col else None  # a column read at the target row
         self._samples: list[tuple[int, int]] = []  # (run_id, end position within run)
         self.timestamps: list[pd.Timestamp] = []  # target day per sample, aligned with __getitem__
         for frame in frames:
@@ -68,6 +70,8 @@ class SequenceDataset(Dataset):
                 self._features.append(frame[feature_cols].values[run].astype(np.float32))
                 target = frame[target_col].values[run].astype(np.float32)
                 self._targets.append(target)
+                if self._weights is not None:
+                    self._weights.append(frame[weight_col].values[run].astype(np.float32))
                 for i in range(lookback, len(run)):
                     if np.isfinite(target[i]):
                         self._samples.append((run_id, i))
@@ -76,8 +80,12 @@ class SequenceDataset(Dataset):
     def __len__(self) -> int:
         return len(self._samples)
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, ...]:
+        """(window, target), and the target row's weight when the dataset has a weight column."""
         run_id, i = self._samples[idx]
         x = self._features[run_id][i - self.lookback : i]
-        return torch.from_numpy(x), torch.tensor(self._targets[run_id][i], dtype=torch.float32)
+        y = torch.tensor(self._targets[run_id][i], dtype=torch.float32)
+        if self._weights is None:
+            return torch.from_numpy(x), y
+        return torch.from_numpy(x), y, torch.tensor(self._weights[run_id][i], dtype=torch.float32)
 

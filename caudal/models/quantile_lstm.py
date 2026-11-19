@@ -101,7 +101,7 @@ class QuantileLSTM(nn.Module):
 
 
 def pinball_loss(
-    pred: torch.Tensor, target: torch.Tensor, quantiles: torch.Tensor
+    pred: torch.Tensor, target: torch.Tensor, quantiles: torch.Tensor, weight: torch.Tensor | None = None
 ) -> torch.Tensor:
     """Mean pinball (quantile) loss.
 
@@ -114,9 +114,12 @@ def pinball_loss(
     pred : (batch, n_quantiles)
     target : (batch,)
     quantiles : (n_quantiles,)
+    weight : (batch,), optional
+        How much each sample counts; the loss is the weighted mean over samples.
     """
     err = target.unsqueeze(1) - pred
-    return torch.maximum(quantiles * err, (quantiles - 1.0) * err).mean()
+    loss = torch.maximum(quantiles * err, (quantiles - 1.0) * err).mean(dim=1)
+    return loss.mean() if weight is None else (loss * weight).sum() / weight.sum()
 
 
 def train_quantile_epochs(
@@ -153,10 +156,10 @@ def train_quantile_epochs(
         epoch = start_epoch + i + 1
         model.train()
         batch_losses = []
-        for x, y in loader:
+        for x, y, *w in loader:  # a dataset may give each window a weight
             x, y = x.to(device), y.to(device)
             optimizer.zero_grad()
-            loss = pinball_loss(model(x), y, q)
+            loss = pinball_loss(model(x), y, q, w[0].to(device) if w else None)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
             optimizer.step()
@@ -189,8 +192,8 @@ def train_quantile_epochs(
 def _validate_quantile(model: QuantileLSTM, loader, device, q: torch.Tensor) -> float:
     model.eval()
     out = []
-    for x, y in loader:
-        out.append(pinball_loss(model(x.to(device)), y.to(device), q).item())
+    for x, y, *w in loader:
+        out.append(pinball_loss(model(x.to(device)), y.to(device), q, w[0].to(device) if w else None).item())
     model.train()
     return float(np.mean(out)) if out else float("nan")
 
@@ -220,7 +223,7 @@ def predict_quantiles(
     loader = DataLoader(wrap(ds) if wrap else ds, batch_size=batch_size, shuffle=False)
 
     preds, obs = [], []
-    for x, y in loader:
+    for x, y, *_ in loader:
         preds.append(model(x.to(device)).cpu().numpy())
         obs.append(y.numpy())
     if not preds:

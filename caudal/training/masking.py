@@ -27,14 +27,14 @@ class MaskRecent(Dataset):
     def __len__(self) -> int:
         return len(self.ds)
 
-    def __getitem__(self, i: int) -> tuple[torch.Tensor, torch.Tensor]:
-        x, y = self.ds[i]
+    def __getitem__(self, i: int) -> tuple[torch.Tensor, ...]:
+        x, y, *rest = self.ds[i]  # a weight, if the dataset gives one, passes through
         m = int(torch.randint(self.days + 1, ())) if self.random else self.days
         if m:
             x = x.clone()  # the window is a view into the dataset's own array
             for value, flag in self.pairs:
                 x[-m:, value], x[-m:, flag] = 0.0, 1.0
-        return x, y
+        return (x, y, *rest)
 
 
 class Anchor(Dataset):
@@ -50,7 +50,7 @@ class Anchor(Dataset):
     def __len__(self) -> int:
         return len(self.ds)
 
-    def __getitem__(self, i: int) -> tuple[torch.Tensor, torch.Tensor]:
-        x, y = self.ds[i]
+    def __getitem__(self, i: int) -> tuple[torch.Tensor, ...]:
+        x, y, *rest = self.ds[i]
         seen = torch.nonzero(x[:, self.flag] == 0)
-        return x, y - (x[seen[-1, 0], self.value] if len(seen) else 0.0)
+        return (x, y - (x[seen[-1, 0], self.value] if len(seen) else 0.0), *rest)

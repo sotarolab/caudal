@@ -82,9 +82,75 @@ def test_issue_leaves_a_forecast_already_issued_alone(tmp_path, monkeypatch):
     ckpt = {"features": H.FEATURES, "hidden": 4, "quantiles": [0.05, 0.5, 0.95], "points": ["HOPC1"],
             "state_dict": QuantileLSTM(n_features=len(H.FEATURES), hidden_size=4, quantiles=[0.05, 0.5, 0.95]).state_dict()}
     monkeypatch.setattr(issue.torch, "load", lambda *a, **k: ckpt)
-    monkeypatch.setattr(openmeteo, "forecast", lambda *a, **k: pytest.fail("an issued hour was fetched again"))
+    monkeypatch.setattr(openmeteo, "recent", lambda *a, **k: pytest.fail("an issued hour was fetched again"))
     path = tmp_path / "forecasts" / "m" / "HOPC1" / "2026-11-18T06Z.csv"
     path.parent.mkdir(parents=True)
     path.write_text("time,lead,q05,q50,q95\n2026-11-18T07:00Z,1,1,2,3\n")
     assert issue.main(["--model", "m", "--out", str(tmp_path), "--hour", "2026-11-18T06"]) == 0
     assert path.read_text() == "time,lead,q05,q50,q95\n2026-11-18T07:00Z,1,1,2,3\n"
+
+
+def test_log_target_round_trips_and_stays_above_zero():
+    sc = {"log": True, "m": 5.0, "s": 1.5}
+    q = np.array([0.0, 3.0, 150.0, 90000.0])
+    assert np.allclose(H.to_cfs(H.to_z(q, sc), sc), q)
+    assert H.to_cfs(-50.0, sc) >= -1  # the lowest the log scale can give is -1 cfs, which the issue clips to 0
+    assert H.scale_of(300.0) == {"log": False, "m": 0.0, "s": 300.0}  # a v1 checkpoint's bare spread
+
+
+def test_with_the_log_target_no_change_is_the_last_flow_and_nothing_falls_below_zero():
+    hour = HOURS[24 * 44]
+    ckpt = {"features": H.FEATURES, "lookback": H.LOOKBACK, "quantiles": [0.05, 0.5, 0.95], "qmean": {"HOPC1": 500.0},
+            "f_mean": [0.0] * len(H.SCALED), "f_std": [1.0] * len(H.SCALED),
+            "scale": {"HOPC1": {"log": True, "m": 5.0, "s": 1.5}}}
+    own = flow(until=24 * 44 - 2)
+    out = H.issue_point(LearnedNothing(), ckpt, "HOPC1", hour, weather(), [own])
+    assert np.allclose(out[["q05", "q50", "q95"]].to_numpy(), own.iloc[-1], atol=0.1)
+    model = QuantileLSTM(n_features=len(H.FEATURES), hidden_size=4, quantiles=ckpt["quantiles"])
+    assert (H.issue_point(model, ckpt, "HOPC1", hour, weather(), [own])[["q05", "q50", "q95"]] >= 0).all().all()
+
+
+def test_frame_carries_soil_moisture_and_the_release_gauges():
+    try:
+        H.configure(H.FULL)
+        assert H.sites("HOPC1") == ["11462500", "11462080"]  # Talmage, below Coyote Valley Dam
+        assert H.sites("GUEC1") == ["11467000", "11464000", "11465350", "11465240"]  # and below Warm Springs Dam
+        hours = pd.date_range("2019-01-01", periods=24 * 100, freq="h", name="time")  # longer than the 90-day total
+        w = pd.DataFrame({"precip": 1.0, "temp": 10.0, "et0": 0.1, "soil_0_7": 0.3, "soil_7_28": 0.3, "soil_28_100": 0.3}, index=hours)
+        flows = [pd.Series(100.0 + k, index=hours) for k in range(4)]
+        fr = H.build_frame("GUEC1", w, flows, qmean=500.0)
+        assert {"soil_0_7", "et0", "precip_90d", "up3"} <= set(fr.columns) and (fr["up3"] == 103.0).all()
+        assert fr["precip_90d"].iloc[-1] == 2160.0
+        z = H.prep(fr, np.zeros(len(H.SCALED)), np.ones(len(H.SCALED)), {"log": True, "m": 5.0, "s": 1.5, "w": 200.0})
+        assert np.allclose(z["weight"], fr["flow"] / 200.0)  # each hour counts by its flow
+    finally:
+        H.configure(H.V2)
+
+
+class Rises(torch.nn.Module):
+    """A model that predicts one scaled unit more flow at every quantile."""
+
+    quantiles = (0.05, 0.5, 0.95)
+
+    def forward(self, x):
+        return torch.ones(len(x), 3)
+
+
+def test_a_blend_issues_the_quantile_average_of_its_members(tmp_path, monkeypatch):
+    import scripts.issue_hourly as issue
+    from caudal.sources import openmeteo, usgs
+
+    hour = HOURS[24 * 44]
+    ckpt = {"features": H.FEATURES, "lookback": H.LOOKBACK, "quantiles": [0.05, 0.5, 0.95], "qmean": {"HOPC1": 500.0},
+            "f_mean": [0.0] * len(H.SCALED), "f_std": [1.0] * len(H.SCALED), "s_target": {"HOPC1": 300.0},
+            "points": ["HOPC1"], "config": H.V1}  # v1's scale: one unit is 300 cfs
+    members = {"a": (LearnedNothing(), ckpt), "b": (Rises(), ckpt)}
+    monkeypatch.setitem(issue.BLEND, "blend", ["a", "b"])
+    monkeypatch.setattr(issue, "load", lambda name: members[name])
+    monkeypatch.setattr(openmeteo, "recent", lambda *a, **k: weather())
+    own = flow(until=24 * 44 - 2)
+    monkeypatch.setattr(usgs, "complete_hours", lambda *a, **k: own)
+    assert issue.main(["--model", "blend", "--out", str(tmp_path), "--hour", f"{hour:%Y-%m-%dT%H}"]) == 0
+    out = pd.read_csv(tmp_path / "forecasts" / "blend" / "HOPC1" / f"{hour:%Y-%m-%dT%H}Z.csv")
+    assert np.allclose(out[["q05", "q50", "q95"]].to_numpy(), own.iloc[-1] + 150, atol=0.2)  # (0 + 300) / 2
+    H.configure(H.V2)
