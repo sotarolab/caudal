@@ -53,6 +53,10 @@ def main(argv=None) -> int:
     points = [x for x in a.points.split(",") if x] or ckpt["points"]
     weather, flows, failed = {}, {}, 0
     for lid in points:
+        path = Path(a.out) / "forecasts" / a.model / lid / f"{hour:%Y-%m-%dT%H}Z.csv"
+        if path.exists():  # issued once, never revised: a second run in the hour leaves the first issue alone
+            print(f"{lid} {hour:%Y-%m-%d %H}Z: already issued, left as it is", flush=True)
+            continue
         try:
             for pt in RAIN_POINTS[lid]:
                 if pt not in weather:
@@ -67,7 +71,6 @@ def main(argv=None) -> int:
             failed += 1
             print(f"FAILED {lid}: {e}", file=sys.stderr, flush=True)
             continue
-        path = Path(a.out) / "forecasts" / a.model / lid / f"{hour:%Y-%m-%dT%H}Z.csv"
         path.parent.mkdir(parents=True, exist_ok=True)
         out.to_csv(path, date_format="%Y-%m-%dT%H:%MZ")
         newest = flows[H.sites(lid)[0]]

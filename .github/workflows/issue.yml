@@ -1,14 +1,13 @@
 name: Issue the daily forecasts
 
-# quantile_inflow_v1_s0 and quantile_inflow_v2_s0 for their 11 points, every day at 14:20 UTC: the 06z forecast cycle has reached
+# quantile_inflow_v2_s0 for its 11 points, every day at 14:20 UTC (v1 issued from 2026-11-15 to 2026-11-18; v2 replaces it): the 06z forecast cycle has reached
 # Open-Meteo by then, and hapi's own archive run (every hour at :37) comes after. The checkpoint,
 # the ERA5 forcing archive and the observed inflow all live on hapi's data branch; the forecasts and
 # the extended forcing are committed back to it, so the inputs of every issued forecast are on record.
 on:
   schedule:
     - cron: '20 14 * * *'
-  # shortcut: a second run on the same day overwrites that day's forecasts (issue.py writes today's file
-  # unconditionally), against "issued once, never revised"; lift it with the guard in issue.py.
+  # A rerun on the same day issues only the points still missing; an issued file is never rewritten (issue.py).
   workflow_dispatch: {}
 
 concurrency:
@@ -38,7 +37,7 @@ jobs:
       - name: Issue each model
         run: |
           failed=0
-          for model in quantile_inflow_v1_s0 quantile_inflow_v2_s0; do
+          for model in quantile_inflow_v2_s0; do
             python scripts/issue.py --model "$model" --out "$HAPI_DATA" || failed=1
           done
           exit $failed
