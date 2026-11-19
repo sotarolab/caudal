@@ -73,3 +73,18 @@ def test_a_model_that_predicts_no_change_issues_the_last_observed_flow():
     own = flow(until=24 * 44 - 2)  # the gauge's newest hour is three hours before the issue hour
     out = H.issue_point(LearnedNothing(), ckpt, "HOPC1", hour, weather(), [own])
     assert np.allclose(out[["q05", "q50", "q95"]].to_numpy(), own.iloc[-1], atol=0.1)  # every lead, every quantile
+
+
+def test_issue_leaves_a_forecast_already_issued_alone(tmp_path, monkeypatch):
+    import scripts.issue_hourly as issue
+    from caudal.sources import openmeteo
+
+    ckpt = {"features": H.FEATURES, "hidden": 4, "quantiles": [0.05, 0.5, 0.95], "points": ["HOPC1"],
+            "state_dict": QuantileLSTM(n_features=len(H.FEATURES), hidden_size=4, quantiles=[0.05, 0.5, 0.95]).state_dict()}
+    monkeypatch.setattr(issue.torch, "load", lambda *a, **k: ckpt)
+    monkeypatch.setattr(openmeteo, "forecast", lambda *a, **k: pytest.fail("an issued hour was fetched again"))
+    path = tmp_path / "forecasts" / "m" / "HOPC1" / "2026-11-18T06Z.csv"
+    path.parent.mkdir(parents=True)
+    path.write_text("time,lead,q05,q50,q95\n2026-11-18T07:00Z,1,1,2,3\n")
+    assert issue.main(["--model", "m", "--out", str(tmp_path), "--hour", "2026-11-18T06"]) == 0
+    assert path.read_text() == "time,lead,q05,q50,q95\n2026-11-18T07:00Z,1,1,2,3\n"

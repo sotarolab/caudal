@@ -17,8 +17,8 @@ def test_job_issues_into_the_hapi_checkout():
     assert "git add data/forecasts data/forcing" in text, "the forcing that issued the forecasts is committed with them"
 
 
-def test_job_issues_both_models():
+def test_job_issues_the_current_daily_model():
     text = WORKFLOW.read_text()
     loop = re.search(r"for model in (.+); do", text)
-    assert loop and loop.group(1).split() == ["quantile_inflow_v1_s0", "quantile_inflow_v2_s0"]
-    assert "|| failed=1" in text and "exit $failed" in text, "one model failing does not stop the other, and the job still fails"
+    assert loop and loop.group(1).split() == ["quantile_inflow_v2_s0"], "v2 replaced v1 on 2026-11-19"
+    assert "|| failed=1" in text and "exit $failed" in text, "a model that fails leaves the job red"

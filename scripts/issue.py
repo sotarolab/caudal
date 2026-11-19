@@ -63,16 +63,19 @@ def main(argv=None) -> int:
     points = [x for x in a.points.split(",") if x] or ckpt["points"]
     failed = 0
     for lid in points:
+        path = Path(a.out) / "forecasts" / a.model / lid / f"{today:%Y-%m-%d}.csv"
+        if path.exists():  # issued once, never revised: a rerun issues only the points that are missing
+            print(f"{lid} {today}: already issued, left as it is", flush=True)
+            continue
         try:
             out = issue_point(model, ckpt, lid, today)
         except Exception as e:  # one point's API hiccup must not lose the others' forecasts
             failed += 1
-            print(f"FAILED {lid}: {e}", file=sys.stderr)
+            print(f"FAILED {lid}: {e}", file=sys.stderr, flush=True)
             continue
-        path = Path(a.out) /"forecasts" / a.model / lid / f"{today:%Y-%m-%d}.csv"
         path.parent.mkdir(parents=True, exist_ok=True)
         out.to_csv(path)
-        print(f"{lid} {today}: q50 lead1 {out.q50.iloc[0]:,.0f} cfs, lead14 {out.q50.iloc[-1]:,.0f} cfs -> {path}")
+        print(f"{lid} {today}: q50 lead1 {out.q50.iloc[0]:,.0f} cfs, lead14 {out.q50.iloc[-1]:,.0f} cfs -> {path}", flush=True)
     return 1 if failed else 0
 
 

@@ -31,7 +31,7 @@ ERA5_LAG_DAYS = 7  # ERA5 arrives about 5 days late; refetching a week keeps the
 def _daily(url: str) -> pd.DataFrame:
     for attempt in range(3):
         try:
-            with urllib.request.urlopen(url, timeout=120) as r:
+            with urllib.request.urlopen(url, timeout=60) as r:  # an issue has minutes; a slow feed fails and is named
                 d = json.load(r)["daily"]
             break
         except Exception:  # Open-Meteo rate-limits bursts; back off and retry

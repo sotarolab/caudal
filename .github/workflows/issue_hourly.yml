@@ -1,14 +1,13 @@
 name: Issue the hourly flow forecasts
 
-# quantile_flow_hourly_v1_s0 for the three Russian River gauges, four times a day at :25, when the hour's flow
+# quantile_flow_hourly_v1_s0 for the three Russian River gauges, every hour at :25, when the hour's flow
 # has reached USGS. The checkpoint lives under data/models/ on hapi's data branch. The weather and the flow are
 # read from Open-Meteo and USGS at run time, so nothing else is needed from the branch. The forecasts are
 # committed back to it.
 on:
   schedule:
-    - cron: '25 0,6,12,18 * * *'
-  # shortcut: a second run in the same hour overwrites that hour's files, against "issued once, never
-  # revised"; lift it with a guard in issue_hourly.py.
+    - cron: '25 * * * *'  # every hour, so each observed hour has a forecast made the hour before
+  # A second run in the same hour leaves the files already issued alone (issue_hourly.py).
   workflow_dispatch: {}
 
 concurrency:
